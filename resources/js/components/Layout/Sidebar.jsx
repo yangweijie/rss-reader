@@ -1,10 +1,10 @@
 import { memo, useState, useEffect, useRef, useMemo } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
-import { Badge } from '@/components/ui/Badge';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/Avatar';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/DropdownMenu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import FeedList from '@/components/Feed/FeedList';
 import { Bookmark, Tag as TagIcon, Plus, Settings, FolderPlus, Upload, Download, PanelLeftClose, Trash2, Edit2 } from 'lucide-react';
 
