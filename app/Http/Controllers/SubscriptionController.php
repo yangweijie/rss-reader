@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Jobs\FetchSubscriptionIcon;
 use App\Models\Article;
 use App\Models\Category;
 use App\Models\Subscription;
@@ -107,14 +106,87 @@ class SubscriptionController extends Controller
 
         
 
-                // 异步获取网站图标
+                // 创建订阅源
                 $subscription = Subscription::create([
                     ...$validated,
                     'user_id' => Auth::id(),
                 ]);
 
-                // 派发异步任务获取图标
-                FetchSubscriptionIcon::dispatch($subscription->id);
+                // 异步获取网站图标（使用 Concurrency::defer）
+                $subscriptionId = $subscription->id;
+                \Illuminate\Support\Facades\Concurrency::defer(function () use ($subscriptionId) {
+                    $sub = Subscription::find($subscriptionId);
+                    if (!$sub || !empty($sub->icon)) {
+                        return;
+                    }
+
+                    try {
+                        $parsedUrl = parse_url($sub->url);
+                        $domain = $parsedUrl['host'] ?? '';
+                        
+                        if (empty($domain)) {
+                            return;
+                        }
+
+                        $scheme = $parsedUrl['scheme'] ?? 'https';
+                        
+                        // 获取顶级域名
+                        $topLevelDomain = $domain;
+                        if (substr_count($domain, '.') > 1) {
+                            $parts = explode('.', $domain);
+                            $topLevelDomain = implode('.', array_slice($parts, -2));
+                        }
+
+                        // 先尝试 oxyry favicon 服务
+                        $oxyryIconUrl = "https://nettools1.oxyry.com/favicon?domain={$topLevelDomain}&size=32";
+                        
+                        $ch = curl_init($oxyryIconUrl);
+                        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                        curl_setopt($ch, CURLOPT_HEADER, true);
+                        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
+                        
+                        $response = curl_exec($ch);
+                        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                        $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+                        $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+                        $body = substr($response, $headerSize);
+                        curl_close($ch);
+                        
+                        $isValidIcon = false;
+                        if ($httpCode == 200 && $body && strlen($body) > 0) {
+                            if ($contentType && (strpos($contentType, 'image/') !== false || strpos($contentType, 'application/octet-stream') !== false)) {
+                                $isValidIcon = true;
+                            } else {
+                                $magic = substr($body, 0, 4);
+                                if ($magic === "\x89PNG" || $magic === "GIF8" || substr($magic, 0, 2) === "\xFF\xD8" || substr($magic, 0, 4) === "RIFF") {
+                                    $isValidIcon = true;
+                                }
+                            }
+                        }
+                        
+                        if ($isValidIcon) {
+                            $sub->icon = $oxyryIconUrl;
+                            $sub->save();
+                            Log::info("订阅源 {$sub->id} 图标获取成功: {$oxyryIconUrl}");
+                            return;
+                        }
+
+                        // oxyry 失败，尝试 Favicon 库
+                        $baseUrl = $scheme . '://' . $domain;
+                        $favicon = new \Favicon\Favicon();
+                        $iconUrl = $favicon->get($baseUrl);
+                        
+                        if ($iconUrl && $iconUrl !== $baseUrl) {
+                            $sub->icon = $iconUrl;
+                            $sub->save();
+                            Log::info("订阅源 {$sub->id} 图标获取成功: {$iconUrl}");
+                        }
+                    } catch (\Exception $e) {
+                        Log::error("订阅源 {$subscriptionId} 图标获取失败: " . $e->getMessage());
+                    }
+                });
 
                 // 异步刷新订阅源
                 \Illuminate\Support\Facades\Concurrency::defer(function () use ($subscription) {
@@ -354,8 +426,81 @@ class SubscriptionController extends Controller
 
         // 如果 icon 为空，异步重新获取
         if (empty($subscription->icon)) {
-            FetchSubscriptionIcon::dispatch($subscription->id);
-            Log::info("订阅源 {$subscription->id} 已派发异步任务获取图标");
+            $subscriptionId = $subscription->id;
+            \Illuminate\Support\Facades\Concurrency::defer(function () use ($subscriptionId) {
+                $sub = Subscription::find($subscriptionId);
+                if (!$sub || !empty($sub->icon)) {
+                    return;
+                }
+
+                try {
+                    $parsedUrl = parse_url($sub->url);
+                    $domain = $parsedUrl['host'] ?? '';
+                    
+                    if (empty($domain)) {
+                        return;
+                    }
+
+                    $scheme = $parsedUrl['scheme'] ?? 'https';
+                    
+                    // 获取顶级域名
+                    $topLevelDomain = $domain;
+                    if (substr_count($domain, '.') > 1) {
+                        $parts = explode('.', $domain);
+                        $topLevelDomain = implode('.', array_slice($parts, -2));
+                    }
+
+                    // 先尝试 oxyry favicon 服务
+                    $oxyryIconUrl = "https://nettools1.oxyry.com/favicon?domain={$topLevelDomain}&size=32";
+                    
+                    $ch = curl_init($oxyryIconUrl);
+                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                    curl_setopt($ch, CURLOPT_HEADER, true);
+                    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+                    curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
+                    
+                    $response = curl_exec($ch);
+                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+                    $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+                    $body = substr($response, $headerSize);
+                    curl_close($ch);
+                    
+                    $isValidIcon = false;
+                    if ($httpCode == 200 && $body && strlen($body) > 0) {
+                        if ($contentType && (strpos($contentType, 'image/') !== false || strpos($contentType, 'application/octet-stream') !== false)) {
+                            $isValidIcon = true;
+                        } else {
+                            $magic = substr($body, 0, 4);
+                            if ($magic === "\x89PNG" || $magic === "GIF8" || substr($magic, 0, 2) === "\xFF\xD8" || substr($magic, 0, 4) === "RIFF") {
+                                $isValidIcon = true;
+                            }
+                        }
+                    }
+                    
+                    if ($isValidIcon) {
+                        $sub->icon = $oxyryIconUrl;
+                        $sub->save();
+                        Log::info("订阅源 {$sub->id} 图标获取成功: {$oxyryIconUrl}");
+                        return;
+                    }
+
+                    // oxyry 失败，尝试 Favicon 库
+                    $baseUrl = $scheme . '://' . $domain;
+                    $favicon = new \Favicon\Favicon();
+                    $iconUrl = $favicon->get($baseUrl);
+                    
+                    if ($iconUrl && $iconUrl !== $baseUrl) {
+                        $sub->icon = $iconUrl;
+                        $sub->save();
+                        Log::info("订阅源 {$sub->id} 图标获取成功: {$iconUrl}");
+                    }
+                } catch (\Exception $e) {
+                    Log::error("订阅源 {$subscriptionId} 图标获取失败: " . $e->getMessage());
+                }
+            });
+            Log::info("订阅源 {$subscription->id} 已安排异步获取图标");
         }
 
         $subscription->update($validated);
@@ -982,6 +1127,158 @@ class SubscriptionController extends Controller
             return self::cleanXmlContent($content);
         } catch (\Exception $e) {
             Log::error('获取原始数据失败: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取网站图标
+     */
+    private function fetchWebsiteIcon($url)
+    {
+        try {
+            $parsedUrl = parse_url($url);
+            $domain = $parsedUrl['host'] ?? '';
+            
+            if (empty($domain)) {
+                return null;
+            }
+
+            $scheme = $parsedUrl['scheme'] ?? 'https';
+            $baseUrl = $scheme . '://' . $domain;
+            Log::info("开始获取网站图标: {$domain}");
+
+            // 获取顶级域名
+            $topLevelDomain = $domain;
+            if (substr_count($domain, '.') > 1) {
+                $parts = explode('.', $domain);
+                $topLevelDomain = implode('.', array_slice($parts, -2));
+            }
+
+            // 先尝试 oxyry favicon 服务
+            $oxyryIconUrl = "https://nettools1.oxyry.com/favicon?domain={$topLevelDomain}&size=32";
+            if ($this->checkOxyryIcon($oxyryIconUrl)) {
+                Log::info("oxyry 服务返回有效图标: {$oxyryIconUrl}");
+                return $oxyryIconUrl;
+            }
+            Log::info("oxyry 服务无响应，尝试其他方式");
+
+            // 尝试多个 URL 策略
+            $urlsToTry = [$baseUrl];
+
+            if (substr_count($domain, '.') > 1) {
+                $topLevelUrl = $scheme . '://' . $topLevelDomain;
+                if ($topLevelUrl !== $baseUrl) {
+                    $urlsToTry[] = $topLevelUrl;
+                }
+            }
+
+            foreach ($urlsToTry as $testUrl) {
+                $finalUrl = $this->getRedirectedUrl($testUrl);
+                if ($finalUrl && $finalUrl !== $testUrl) {
+                    $urlsToTry[] = $finalUrl;
+                }
+            }
+
+            $urlsToTry = array_unique($urlsToTry);
+            
+            foreach ($urlsToTry as $tryUrl) {
+                $iconUrl = $this->fetchIconFromUrl($tryUrl);
+                if ($iconUrl) {
+                    return $iconUrl;
+                }
+            }
+
+            return null;
+        } catch (\Exception $e) {
+            Log::error('获取网站图标失败: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 检查 oxyry 服务是否返回有效图标
+     */
+    private function checkOxyryIcon($url, $timeout = 5)
+    {
+        try {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HEADER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            $body = substr($response, $headerSize);
+            
+            curl_close($ch);
+            
+            if ($httpCode == 200 && $body && strlen($body) > 0) {
+                if ($contentType && (strpos($contentType, 'image/') !== false || strpos($contentType, 'application/octet-stream') !== false)) {
+                    return true;
+                }
+                $magic = substr($body, 0, 4);
+                if ($magic === "\x89PNG" || $magic === "GIF8" || substr($magic, 0, 2) === "\xFF\xD8" || substr($magic, 0, 4) === "RIFF") {
+                    return true;
+                }
+            }
+            
+            return false;
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * 获取重定向后的最终 URL
+     */
+    private function getRedirectedUrl($url, $timeout = 5)
+    {
+        try {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, false);
+            curl_setopt($ch, CURLOPT_HEADER, true);
+            curl_setopt($ch, CURLOPT_NOBODY, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
+            
+            curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            
+            if ($httpCode >= 300 && $httpCode < 400) {
+                $redirectUrl = curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+                curl_close($ch);
+                return $redirectUrl;
+            }
+            
+            curl_close($ch);
+            return null;
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * 从指定 URL 获取图标
+     */
+    private function fetchIconFromUrl($url)
+    {
+        try {
+            $normalizedUrl = rtrim($url, '/');
+            $favicon = new \Favicon\Favicon();
+            $iconUrl = $favicon->get($normalizedUrl);
+            
+            if ($iconUrl && $iconUrl !== $normalizedUrl) {
+                return $iconUrl;
+            }
+            return null;
+        } catch (\Exception $e) {
             return null;
         }
     }
