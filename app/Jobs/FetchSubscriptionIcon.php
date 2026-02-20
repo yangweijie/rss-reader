@@ -72,6 +72,21 @@ class FetchSubscriptionIcon implements ShouldQueue
             $baseUrl = $scheme . '://' . $domain;
             Log::info("开始获取网站图标: {$domain}");
 
+            // 获取顶级域名
+            $topLevelDomain = $domain;
+            if (substr_count($domain, '.') > 1) {
+                $parts = explode('.', $domain);
+                $topLevelDomain = implode('.', array_slice($parts, -2));
+            }
+
+            // 先尝试 oxyry favicon 服务
+            $oxyryIconUrl = "https://nettools1.oxyry.com/favicon?domain={$topLevelDomain}&size=32";
+            if ($this->checkOxyryIcon($oxyryIconUrl)) {
+                Log::info("oxyry 服务返回有效图标: {$oxyryIconUrl}");
+                return $oxyryIconUrl;
+            }
+            Log::info("oxyry 服务无响应，尝试其他方式");
+
             // 尝试多个 URL 策略
             $urlsToTry = [
                 $baseUrl,  // 原域名
@@ -79,8 +94,6 @@ class FetchSubscriptionIcon implements ShouldQueue
 
             // 如果是子域名，也尝试顶级域名
             if (substr_count($domain, '.') > 1) {
-                $parts = explode('.', $domain);
-                $topLevelDomain = implode('.', array_slice($parts, -2));
                 $topLevelUrl = $scheme . '://' . $topLevelDomain;
                 if ($topLevelUrl !== $baseUrl) {
                     $urlsToTry[] = $topLevelUrl;
@@ -114,6 +127,47 @@ class FetchSubscriptionIcon implements ShouldQueue
         } catch (\Exception $e) {
             Log::error('获取网站图标失败: ' . $e->getMessage());
             return null;
+        }
+    }
+
+    /**
+     * 检查 oxyry 服务是否返回有效图标
+     */
+    private function checkOxyryIcon($url, $timeout = 5)
+    {
+        try {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HEADER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, $timeout);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36');
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+            $headerSize = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+            $body = substr($response, $headerSize);
+            
+            curl_close($ch);
+            
+            // 检查是否返回有效的图片响应
+            if ($httpCode == 200 && $body && strlen($body) > 0) {
+                // 检查 Content-Type 是否是图片类型
+                if ($contentType && (strpos($contentType, 'image/') !== false || strpos($contentType, 'application/octet-stream') !== false)) {
+                    return true;
+                }
+                // 检查 body 是否以图片魔数开头
+                $magic = substr($body, 0, 4);
+                if ($magic === "\x89PNG" || $magic === "GIF8" || substr($magic, 0, 2) === "\xFF\xD8" || substr($magic, 0, 4) === "RIFF") {
+                    return true;
+                }
+            }
+            
+            return false;
+        } catch (\Exception $e) {
+            Log::debug("oxyry 服务检查失败: " . $e->getMessage());
+            return false;
         }
     }
 
