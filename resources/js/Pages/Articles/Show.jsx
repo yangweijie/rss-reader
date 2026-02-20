@@ -1,8 +1,8 @@
 import { Head, Link, router } from '@inertiajs/react';
 import DashboardLayout from '@/components/Layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
 
 export default function ArticleShow({ article, tags }) {
     const handleMarkAsRead = () => {

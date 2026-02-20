@@ -3,14 +3,14 @@ import { Head, useForm, usePage, router } from '@inertiajs/react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import {
     Select,
     SelectContent,
     SelectItem,
     SelectTrigger,
     SelectValue,
-} from '@/components/ui/select';
+} from '@/components/ui/Select';
 import { Link, Folder, Pencil } from 'lucide-react';
 import DashboardLayout from '@/components/Layout/DashboardLayout';
 import CategoryDialog from '@/components/Feed/CategoryDialog.jsx';

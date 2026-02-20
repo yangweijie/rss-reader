@@ -1,7 +1,7 @@
 import { Head, Link } from '@inertiajs/react';
 import DashboardLayout from '@/components/Layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 
 export default function Dashboard() {
     return (
