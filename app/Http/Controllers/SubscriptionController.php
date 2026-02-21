@@ -713,7 +713,18 @@ class SubscriptionController extends Controller
                     ]);
 
                     // 设置原始内容处理器以清理 XML
-                    $feed->set_raw_data(self::fetchAndCleanRawData($subscription->url));
+                    $rawData = self::fetchAndCleanRawData($subscription->url);
+                    
+                    if ($rawData === null) {
+                        Log::warning("订阅源 {$subscription->id} 无法获取原始数据，跳过");
+                        $subscription->update([
+                            'error_message' => '无法获取 RSS 内容，可能是网络问题或网站限制了访问',
+                            'last_error_at' => now(),
+                        ]);
+                        continue;
+                    }
+                    
+                    $feed->set_raw_data($rawData);
                     
                     $feed->init();
 
