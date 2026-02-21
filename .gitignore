@@ -83,7 +83,7 @@ ehthumbs.db
 Thumbs.db
 
 # Composer
-composer.lock
+# composer.lock
 vendor/
 
 # Laravel Homestead
