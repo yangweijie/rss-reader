@@ -277,6 +277,8 @@ const handleArticleClick = (article) => {
             setArticles(prev => prev.map(a => 
                 a.id === article.id ? { ...a, read: true } : a
             ));
+            // 刷新订阅源数据以更新未读数
+            router.reload({ only: ['subscriptions'] });
         }).catch(err => console.error('Failed to mark as read:', err));
     }
 };
@@ -347,6 +349,8 @@ const handleArticleClick = (article) => {
                     selectedIds.has(a.id) ? { ...a, read: true } : a
                 ));
                 setSelectedIds(new Set());
+                // 刷新订阅源数据以更新未读数
+                router.reload({ only: ['subscriptions'] });
             }
         } catch (err) {
             console.error('Failed to batch mark as read:', err);
