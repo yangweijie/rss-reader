@@ -15,14 +15,20 @@ export default function DashboardLayout({ children, sidebarMode = 'normal', onHi
 
                 if (!lastRefresh || (now - lastRefresh) > refreshInterval) {
                     try {
+                        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
                         const response = await fetch('/subscriptions/refresh-all', {
                             method: 'POST',
                             headers: {
                                 'Content-Type': 'application/json',
                                 'X-Requested-With': 'XMLHttpRequest',
                                 'Accept': 'application/json',
+                                'X-CSRF-TOKEN': csrfToken,
                             },
                         });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
 
                         const data = await response.json();
                         
