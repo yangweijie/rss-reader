@@ -137,6 +137,7 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
     }, [loadMore, loading, currentPage, lastPage]);
 
     const prevFiltersRef = useRef(filters);
+    const prevDataVersionRef = useRef(null);
     
     useEffect(() => {
         const filtersChanged = 
@@ -144,15 +145,22 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
             prevFiltersRef.current.search !== filters.search ||
             prevFiltersRef.current.subscription !== filters.subscription;
         
-        if (filtersChanged) {
+        // 使用数据的第一个元素 ID 作为版本标识，检测数据是否刷新
+        const dataVersion = initialArticles.data?.[0]?.id ?? null;
+        const dataChanged = prevDataVersionRef.current !== dataVersion && dataVersion !== null;
+        
+        if (filtersChanged || dataChanged) {
             setArticles(initialArticles.data || []);
             setCurrentPage(initialArticles.current_page || 1);
             setLastPage(initialArticles.last_page || 1);
             setTotal(initialArticles.total || 0);
-            setSelectedIds(new Set());
-            setSearchQuery(filters.search || '');
-            setSelectedArticle(null);
+            if (filtersChanged) {
+                setSelectedIds(new Set());
+                setSearchQuery(filters.search || '');
+                setSelectedArticle(null);
+            }
             prevFiltersRef.current = filters;
+            prevDataVersionRef.current = dataVersion;
         }
     }, [initialArticles, filters]);
 
@@ -223,25 +231,6 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [searchQuery]);
-
-    // Page Visibility API - 当页面恢复活跃时刷新文章列表
-    useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                console.log('页面恢复活跃，刷新文章列表');
-                // 刷新当前订阅源的文章列表
-                router.reload({ only: ['articles'] });
-            }
-        };
-
-        // 添加可见性变化监听
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        // 清理监听器
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
-    }, []);
 
     const handleRefreshAll = () => {
         setIsRefreshing(true);

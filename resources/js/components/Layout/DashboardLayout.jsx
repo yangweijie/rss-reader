@@ -34,7 +34,7 @@ export default function DashboardLayout({ children, sidebarMode = 'normal', onHi
                         
                         if (data.success) {
                             localStorage.setItem('last_subscription_refresh', now.toString());
-                            router.reload({ only: ['subscriptions', 'tags'] });
+                            router.reload({ only: ['subscriptions', 'tags', 'articles'] });
                         }
                     } catch (error) {
                         console.error('自动刷新失败:', error);
