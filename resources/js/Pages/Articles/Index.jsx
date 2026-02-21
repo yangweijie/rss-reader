@@ -87,7 +87,12 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
             only: ['articles'],
             onSuccess: (page) => {
                 const newArticles = page.props.articles.data || [];
-                setArticles(prev => [...prev, ...newArticles]);
+                // 去重：过滤掉已存在的文章
+                setArticles(prev => {
+                    const existingIds = new Set(prev.map(a => a.id));
+                    const uniqueNewArticles = newArticles.filter(a => !existingIds.has(a.id));
+                    return [...prev, ...uniqueNewArticles];
+                });
                 setCurrentPage(page.props.articles.current_page);
                 setLastPage(page.props.articles.last_page);
                 setTotal(page.props.articles.total);
@@ -145,9 +150,12 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
             prevFiltersRef.current.search !== filters.search ||
             prevFiltersRef.current.subscription !== filters.subscription;
         
-        // 使用数据的第一个元素 ID 作为版本标识，检测数据是否刷新
-        const dataVersion = initialArticles.data?.[0]?.id ?? null;
-        const dataChanged = prevDataVersionRef.current !== dataVersion && dataVersion !== null;
+        // 计算数据版本：使用长度 + 首个ID + 最后ID 作为版本标识
+        const dataLength = initialArticles.data?.length ?? 0;
+        const firstId = initialArticles.data?.[0]?.id ?? null;
+        const lastId = initialArticles.data?.[dataLength - 1]?.id ?? null;
+        const dataVersion = `${dataLength}-${firstId}-${lastId}`;
+        const dataChanged = prevDataVersionRef.current !== dataVersion;
         
         if (filtersChanged || dataChanged) {
             setArticles(initialArticles.data || []);
