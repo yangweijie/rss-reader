@@ -201,13 +201,22 @@ class RefreshSubscriptionService
             ->first();
 
         if ($existingArticle) {
-            // 更新现有文章
+            // 检查发布时间是否变化
+            $existingPublishedAt = $existingArticle->published_at->timestamp;
+            $newPublishedAt = $publishedAt;
+
+            // 如果发布时间相同，跳过更新
+            if ($existingPublishedAt == $newPublishedAt) {
+                return "skipped";
+            }
+
+            // 只有发布时间变化时才更新
             $existingArticle->update([
                 "title" => $title ?: "无标题",
                 "content" => $content,
                 "excerpt" => $excerpt ?: "点击标题阅读全文",
                 "author" => $author ? $author->name : null,
-                "published_at" => Carbon::createFromTimestamp($publishedAt),
+                "published_at" => Carbon::createFromTimestamp($newPublishedAt),
             ]);
             return "updated";
         } else {
