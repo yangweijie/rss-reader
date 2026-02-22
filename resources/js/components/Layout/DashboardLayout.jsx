@@ -7,38 +7,25 @@ export default function DashboardLayout({ children, sidebarMode = 'normal', onHi
     const currentPath = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
 
     useEffect(() => {
-        const handleVisibilityChange = async () => {
+        const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible' && currentPath === '/articles') {
                 const lastRefresh = localStorage.getItem('last_subscription_refresh');
                 const now = Date.now();
                 const refreshInterval = 5 * 60 * 1000;
 
                 if (!lastRefresh || (now - lastRefresh) > refreshInterval) {
-                    try {
-                        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
-                        const response = await fetch('/subscriptions/refresh-all', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest',
-                                'Accept': 'application/json',
-                                'X-CSRF-TOKEN': csrfToken,
-                            },
-                        });
-
-                        if (!response.ok) {
-                            throw new Error(`HTTP ${response.status}`);
+                    localStorage.setItem('last_subscription_refresh', now.toString());
+                    
+                    router.post('/subscriptions/refresh-all', {}, {
+                        preserveState: true,
+                        preserveScroll: true,
+                        onSuccess: () => {
+                            // 刷新成功，Inertia 会自动更新 props
+                        },
+                        onError: (errors) => {
+                            console.error('自动刷新失败:', errors);
                         }
-
-                        const data = await response.json();
-                        
-                        if (data.success) {
-                            localStorage.setItem('last_subscription_refresh', now.toString());
-                            router.reload({ only: ['subscriptions', 'tags', 'articles'] });
-                        }
-                    } catch (error) {
-                        console.error('自动刷新失败:', error);
-                    }
+                    });
                 }
             }
         };
