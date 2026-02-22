@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\RefreshSubscriptionJob;
 use App\Models\Article;
 use App\Models\Category;
 use App\Models\Subscription;
+use App\Services\RefreshSubscriptionService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -17,6 +19,8 @@ use XMLWriter;
 class SubscriptionController extends Controller
 {
     use AuthorizesRequests;
+
+    private RefreshSubscriptionService $refreshService;
 
     public function create(Request $request)
     {
@@ -523,322 +527,53 @@ class SubscriptionController extends Controller
     {
         $this->authorize('update', $subscription);
 
-        try {
-            $feed = new SimplePie();
+        $this->refreshService->setUser(Auth::user());
+        $result = $this->refreshService->refresh($subscription);
+
+        if ($result->isSuccess()) {
+            $newCount = $result->getNewArticlesCount();
+            $updatedCount = $result->getUpdatedArticlesCount();
             
-            // 先获取并清理内容
-            $cleanedData = self::fetchAndCleanRawData($subscription->url);
-            
-            if ($cleanedData === null) {
-                Log::warning("订阅源 {$subscription->id} 无法获取 RSS 内容");
-                return back()->withErrors(['error' => '无法获取 RSS 内容']);
+            $message = "刷新成功";
+            if ($newCount > 0) {
+                $message .= "，新增 {$newCount} 篇文章";
+            }
+            if ($updatedCount > 0) {
+                $message .= "，更新 {$updatedCount} 篇文章";
             }
             
-            Log::info("订阅源 {$subscription->id} 获取清理后的内容，长度: " . strlen($cleanedData));
-            
-            // 设置清理后的原始数据
-            $feed->set_raw_data($cleanedData);
-            
-            $feed->set_cache_location(storage_path('app/cache/rss'));
-            $feed->set_cache_duration(3600);
-            $feed->enable_cache(true);
-
-            // 设置 User-Agent 模拟浏览器
-            $feed->set_useragent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0');
-
-            // 设置输出编码为 UTF-8，兼容 GBK 等中文编码
-            $feed->set_output_encoding('UTF-8');
-
-            // 增加超时时间，V2EX 等网站可能响应较慢
-            $feed->set_timeout(60);
-
-            // 设置额外的 cURL 选项
-            $feed->set_curl_options([
-                CURLOPT_HTTPHEADER => [
-                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                    'Accept-Language: en-US,en;q=0.9',
-                    'Accept-Encoding: gzip, deflate, br',
-                    'Connection: keep-alive',
-                    'Upgrade-Insecure-Requests: 1',
-                    'Sec-Fetch-Dest: document',
-                    'Sec-Fetch-Mode: navigate',
-                    'Sec-Fetch-Site: none',
-                    'Sec-Fetch-User: ?1',
-                    'Cache-Control: max-age=0',
-                ],
-                CURLOPT_REFERER => 'https://php.libhunt.com/',
-            ]);
-
-            Log::info("订阅源 {$subscription->id} 开始初始化 SimplePie");
-            
-            $feed->init();
-            
-            Log::info("订阅源 {$subscription->id} SimplePie 初始化完成，错误: " . ($feed->error() ?: '无'));
-
-            // 如果 SimplePie 失败，尝试使用 Selenium
-            if ($feed->error()) {
-                $error = $feed->error();
-
-                // 检测是否是反爬虫保护
-                if (strpos($error, '403') !== false || strpos($error, 'Just a moment') !== false) {
-                    // 尝试使用 Selenium 获取
-                    Log::info('SimplePie 失败，尝试使用 Selenium 获取: ' . $subscription->url);
-                    $rssContent = $this->fetchRssWithSelenium($subscription->url);
-
-                    if ($rssContent) {
-                        // 使用 Selenium 获取的内容创建临时 SimplePie
-                        $feed = new SimplePie();
-                        $feed->set_raw_data($rssContent);
-                        $feed->set_output_encoding('UTF-8');
-                        $feed->init();
-
-                        if ($feed->error()) {
-                            return back()->withErrors(['error' => 'Selenium 获取成功但解析失败：' . $feed->error()]);
-                        }
-                    } else {
-                        return back()->withErrors(['error' => '该订阅源使用了反爬虫保护（如 Cloudflare），Selenium 也无法获取。请直接访问网站查看：' . $subscription->url]);
-                    }
-                } elseif (strpos($error, 'Connection reset') !== false || strpos($error, 'timed out') !== false) {
-                    return back()->withErrors(['error' => '连接超时或被重置，可能是网络问题或网站限制了访问。请稍后重试。']);
-                } else {
-                    return back()->withErrors(['error' => '无法获取 RSS 订阅：' . $error]);
-                }
-            }
-
-            $count = 0;
-            foreach ($feed->get_items() as $item) {
-                $link = $item->get_permalink();
-                $title = $item->get_title();
-                $publishedAt = $item->get_date('Y-m-d H:i:s');
-
-                if (!$link) {
-                    continue;
-                }
-
-                // 获取内容，如果没有内容则使用链接
-                $content = $item->get_content();
-                $excerpt = $item->get_description();
-
-                // 如果没有内容和摘要，创建一个包含链接的内容
-                if (empty($content) && empty($excerpt)) {
-                    $content = '<p><a href="' . htmlspecialchars($link) . '" target="_blank">阅读全文</a></p>';
-                }
-
-                $article = Article::updateOrCreate(
-                    [
-                        'user_id' => Auth::id(),
-                        'feed_id' => $subscription->id,
-                        'link' => $link,
-                    ],
-                    [
-                        'title' => $title ?: '无标题',
-                        'content' => $content,
-                        'excerpt' => $excerpt ?: '点击标题阅读全文',
-                        'author' => $item->get_author(),
-                        'published_at' => $publishedAt ?: now(),
-                        'read' => false,
-                        'favorite' => false,
-                    ]
-                );
-
-                if ($article->wasRecentlyCreated) {
-                    $count++;
-                }
-            }
-
-            $unreadCount = Article::where('feed_id', $subscription->id)
-                ->where('user_id', Auth::id())
-                ->where('read', false)
-                ->count();
-
-            $subscription->update([
-                'title' => $feed->get_title() ?: $subscription->title,
-                'unread_count' => $unreadCount,
-                'error_message' => null,
-                'last_error_at' => null,
-            ]);
-
-            return back()->with('success', "已刷新订阅源，获取了 {$count} 篇新文章");
-        } catch (\Exception $e) {
-            Log::error('Failed to refresh subscription: ' . $e->getMessage());
-
-            // 更新错误信息
-            $subscription->update([
-                'error_message' => $e->getMessage(),
-                'last_error_at' => now(),
-            ]);
-
-            return back()->withErrors(['error' => '刷新失败：' . $e->getMessage()]);
+            return back()->with('success', $message);
         }
+
+        return back()->withErrors(['error' => $result->getFirstError()]);
     }
 
     public function refreshAll()
     {
         $subscriptions = Subscription::where('user_id', Auth::id())->get();
+        
+        if ($subscriptions->isEmpty()) {
+            return back()->with('info', '没有需要刷新的订阅源');
+        }
 
-        // 使用异步任务刷新所有订阅源，避免超时
-        \Illuminate\Support\Facades\Concurrency::defer(function () use ($subscriptions) {
-            foreach ($subscriptions as $subscription) {
+        $count = $subscriptions->count();
+        $closures = [];
+
+        foreach ($subscriptions as $subscription) {
+            $closures[] = function () use ($subscription) {
                 try {
-                    $feed = new SimplePie();
-                    $feed->set_feed_url($subscription->url);
-                    $feed->set_cache_location(storage_path('app/cache/rss'));
-                    $feed->set_cache_duration(3600);
-                    $feed->enable_cache(true);
-
-                    // 设置 User-Agent 模拟浏览器
-                    $feed->set_useragent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0');
-
-                    // 设置输出编码为 UTF-8，兼容 GBK 等中文编码
-                    $feed->set_output_encoding('UTF-8');
-
-                    // 增加超时时间，V2EX 等网站可能响应较慢
-                    $feed->set_timeout(60);
-
-                    // 设置额外的 cURL 选项
-                    $feed->set_curl_options([
-                        CURLOPT_HTTPHEADER => [
-                            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                            'Accept-Language: en-US,en;q=0.9',
-                            'Accept-Encoding: gzip, deflate, br',
-                            'Connection: keep-alive',
-                            'Upgrade-Insecure-Requests: 1',
-                            'Sec-Fetch-Dest: document',
-                            'Sec-Fetch-Mode: navigate',
-                            'Sec-Fetch-Site: none',
-                            'Sec-Fetch-User: ?1',
-                            'Cache-Control: max-age=0',
-                        ],
-                        CURLOPT_REFERER => 'https://php.libhunt.com/',
-                    ]);
-
-                    // 设置原始内容处理器以清理 XML
-                    $rawData = self::fetchAndCleanRawData($subscription->url);
-                    
-                    if ($rawData === null) {
-                        Log::warning("订阅源 {$subscription->id} 无法获取原始数据，跳过");
-                        $subscription->update([
-                            'error_message' => '无法获取 RSS 内容，可能是网络问题或网站限制了访问',
-                            'last_error_at' => now(),
-                        ]);
-                        continue;
-                    }
-                    
-                    $feed->set_raw_data($rawData);
-                    
-                    $feed->init();
-
-                    Log::info("订阅源 {$subscription->id} ({$subscription->title}) 开始获取 RSS");
-
-                    if ($feed->error()) {
-                    $error = $feed->error();
-                    Log::warning("订阅源 {$subscription->id} SimplePie 获取失败: {$error}");
-
-                    // 检测常见的反爬虫错误
-                    $isAntiBot = false;
-                    if (strpos($error, '403') !== false || strpos($error, 'Just a moment') !== false || strpos($error, '请稍候') !== false) {
-                        Log::info("订阅源 {$subscription->id} 检测到反爬虫保护，准备使用 Dusk 获取");
-                        $startTime = microtime(true);
-                        
-                        $rssContent = $this->fetchRssWithDusk($subscription->url);
-                        
-                        $elapsed = round(microtime(true) - $startTime, 2);
-                        
-                        if ($rssContent) {
-                            Log::info("订阅源 {$subscription->id} Dusk 获取成功，耗时 {$elapsed} 秒，内容长度: " . strlen($rssContent) . " bytes");
-                            
-                            $feed = new SimplePie();
-                            $feed->set_raw_data($rssContent);
-                            $feed->enable_cache(false);
-                            $feed->init();
-                            
-                            if (!$feed->error()) {
-                                Log::info("订阅源 {$subscription->id} Dusk RSS 解析成功");
-                            } else {
-                                $duskError = $feed->error();
-                                Log::error("订阅源 {$subscription->id} Dusk RSS 解析失败: {$duskError}");
-                                $error = '该订阅源使用了反爬虫保护（如 Cloudflare），无法自动获取。请手动访问：' . $subscription->url;
-                                $isAntiBot = true;
-                            }
-                        } else {
-                            Log::error("订阅源 {$subscription->id} Dusk 获取失败，耗时 {$elapsed} 秒");
-                            $error = '该订阅源使用了反爬虫保护（如 Cloudflare），无法自动获取。请手动访问：' . $subscription->url;
-                            $isAntiBot = true;
-                        }
-                    } elseif (strpos($error, 'Connection reset') !== false || strpos($error, 'timed out') !== false) {
-                        Log::warning("订阅源 {$subscription->id} 连接问题: {$error}");
-                        $error = '连接超时或被重置，可能是网络问题或网站限制了访问。请稍后重试。';
-                    } else {
-                        Log::error("订阅源 {$subscription->id} 未知错误: {$error}");
-                    }
-
-                    Log::error('Failed to refresh subscription ' . $subscription->id . ': ' . $error);
-                    $subscription->update([
-                        'error_message' => $error,
-                        'last_error_at' => now(),
-                    ]);
-                    continue;
-                }
-
-                    Log::info("订阅源 {$subscription->id} RSS 获取成功，开始解析文章");
-                    $count = 0;
-                    foreach ($feed->get_items() as $item) {
-                        $link = $item->get_permalink();
-                        $title = $item->get_title();
-                        $publishedAt = $item->get_date('Y-m-d H:i:s');
-
-                        if (!$link) {
-                            continue;
-                        }
-
-                        $article = Article::updateOrCreate(
-                            [
-                                'user_id' => $subscription->user_id,
-                                'feed_id' => $subscription->id,
-                                'link' => $link,
-                            ],
-                            [
-                                'title' => $title ?: '无标题',
-                                'content' => $item->get_content(),
-                                'excerpt' => $item->get_description(),
-                                'author' => $item->get_author(),
-                                'published_at' => $publishedAt ?: now(),
-                                'read' => false,
-                                'favorite' => false,
-                            ]
-                        );
-
-                        if ($article->wasRecentlyCreated) {
-                            $count++;
-                        }
-                    }
-
-                    $unreadCount = Article::where('feed_id', $subscription->id)
-                        ->where('user_id', $subscription->user_id)
-                        ->where('read', false)
-                        ->count();
-
-                    $subscription->update([
-                        'title' => $feed->get_title() ?: $subscription->title,
-                        'unread_count' => $unreadCount,
-                        'error_message' => null,
-                        'last_error_at' => null,
-                    ]);
-
-                    Log::info('Successfully refreshed subscription ' . $subscription->id . ', got ' . $count . ' new articles');
+                    $service = new \App\Services\RefreshSubscriptionService();
+                    $service->setUser($subscription->user);
+                    $service->refresh($subscription);
                 } catch (\Exception $e) {
-                    Log::error('Failed to refresh subscription ' . $subscription->id . ': ' . $e->getMessage());
-
-                    // 更新错误信息
-                    $subscription->update([
-                        'error_message' => $e->getMessage(),
-                        'last_error_at' => now(),
-                    ]);
+                    \Illuminate\Support\Facades\Log::error("订阅源刷新失败 [{$subscription->id}]: " . $e->getMessage());
                 }
-            }
-        });
+            };
+        }
 
-        return back()->with('success', "正在后台刷新 {$subscriptions->count()} 个订阅源，请稍后查看结果");
+        \Illuminate\Support\Facades\Concurrency::defer($closures);
+
+        return back()->with('success', "正在后台刷新 {$count} 个订阅源，请稍后查看结果");
     }
 
     public function importOpml(Request $request)
