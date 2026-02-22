@@ -22,6 +22,11 @@ class SubscriptionController extends Controller
 
     private RefreshSubscriptionService $refreshService;
 
+    public function __construct(RefreshSubscriptionService $refreshService)
+    {
+        $this->refreshService = $refreshService;
+    }
+
     public function create(Request $request)
     {
         $category = null;
