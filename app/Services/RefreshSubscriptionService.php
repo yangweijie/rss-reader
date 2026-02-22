@@ -32,110 +32,115 @@ class RefreshSubscriptionService
         $maxRetries = 3;
         $retryDelay = 10;
 
-        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-            try {
-                DB::beginTransaction();
-                Log::info("获取订阅源 {$subscription->id} {$subscription->url} 中");
-                // 获取并清理原始数据
-                $rawData = RssParser::fetchAndCleanRawData($subscription->url);
+        try {
+            Log::info("获取订阅源 {$subscription->id} {$subscription->url} 中");
+            
+            // 获取并清理原始数据（不需要事务）
+            $rawData = RssParser::fetchAndCleanRawData($subscription->url);
 
             if ($rawData === null) {
                 $result->addError("无法获取 RSS 内容");
-                $this->updateSubscriptionError(
-                    $subscription,
-                    "无法获取 RSS 内容",
-                );
-                DB::commit();
+                $this->updateSubscriptionError($subscription, "无法获取 RSS 内容");
                 return $result;
             }
 
-            // 解析 RSS
+            // 解析 RSS（不需要事务）
             if (!$this->parser->parseFromRawData($rawData)) {
                 $error = $this->parser->getError();
 
                 // 检测是否是反爬虫保护
                 if ($this->isAntiBotProtection($error)) {
-                    $fallbackData = $this->fetchWithFallback(
-                        $subscription->url,
-                    );
+                    $fallbackData = $this->fetchWithFallback($subscription->url);
 
                     if ($fallbackData !== null) {
                         if (!$this->parser->parseFromRawData($fallbackData)) {
-                            $result->addError(
-                                "Fallback 解析失败: " .
-                                    $this->parser->getError(),
-                            );
-                            $this->updateSubscriptionError(
-                                $subscription,
-                                $this->parser->getError(),
-                            );
-                            DB::commit();
+                            $result->addError("Fallback 解析失败: " . $this->parser->getError());
+                            $this->updateSubscriptionError($subscription, $this->parser->getError());
                             return $result;
                         }
                     } else {
                         $result->addError("无法绕过反爬虫保护");
-                        $this->updateSubscriptionError(
-                            $subscription,
-                            "无法绕过反爬虫保护",
-                        );
-                        DB::commit();
+                        $this->updateSubscriptionError($subscription, "无法绕过反爬虫保护");
                         return $result;
                     }
                 } else {
                     $result->addError($error);
                     $this->updateSubscriptionError($subscription, $error);
-                    DB::commit();
                     return $result;
                 }
             }
 
-            // 解析文章
+            // 解析文章数据（不需要事务）
             $items = $this->parser->getItems();
-            $newCount = 0;
-            $updatedCount = 0;
+            $itemCount = count($items);
 
-            foreach ($items as $item) {
-                $articleResult = $this->syncArticle($subscription, $item);
+            Log::info("解析到 {$itemCount} 篇文章");
 
-                if ($articleResult === "created") {
-                    $newCount++;
-                } elseif ($articleResult === "updated") {
-                    $updatedCount++;
+            // 如果文章少于 2 篇，直接处理不需要事务
+            if ($itemCount < 2) {
+                $newCount = 0;
+                $updatedCount = 0;
+
+                foreach ($items as $item) {
+                    $articleResult = $this->syncArticle($subscription, $item);
+                    if ($articleResult === "created") {
+                        $newCount++;
+                    } elseif ($articleResult === "updated") {
+                        $updatedCount++;
+                    }
+                }
+
+                // 更新订阅源信息
+                $this->updateSubscriptionInfo($subscription);
+
+                $result->setSuccess($newCount, $updatedCount);
+                return $result;
+            }
+
+            // 如果文章 >= 2 篇，使用事务批量处理
+            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                try {
+                    DB::beginTransaction();
+
+                    $newCount = 0;
+                    $updatedCount = 0;
+
+                    foreach ($items as $item) {
+                        $articleResult = $this->syncArticle($subscription, $item);
+                        if ($articleResult === "created") {
+                            $newCount++;
+                        } elseif ($articleResult === "updated") {
+                            $updatedCount++;
+                        }
+                    }
+
+                    // 更新订阅源信息
+                    $this->updateSubscriptionInfo($subscription);
+
+                    $result->setSuccess($newCount, $updatedCount);
+                    DB::commit();
+
+                    Log::info("订阅源 {$subscription->id} 刷新成功：新增 {$newCount} 篇，更新 {$updatedCount} 篇");
+                    return $result;
+
+                } catch (\Exception $e) {
+                    DB::rollBack();
+
+                    // 检测数据库锁定错误
+                    $isDatabaseLocked = stripos($e->getMessage(), 'database is locked') !== false 
+                                     || stripos($e->getMessage(), 'SQLSTATE[HY000]') !== false;
+
+                    if ($isDatabaseLocked && $attempt < $maxRetries) {
+                        Log::warning("数据库锁定 [{$subscription->id}]，第 {$attempt} 次重试，等待 {$retryDelay} 秒");
+                        sleep($retryDelay);
+                        continue;
+                    }
+
+                    throw $e;
                 }
             }
 
-            Log::info("获得新文章 {$newCount} 篇");
-
-            // 更新订阅源信息
-            $feedTitle = $this->parser->getTitle();
-            $unreadCount = Article::where("feed_id", $subscription->id)
-                ->where("read", false)
-                ->count();
-
-            $subscription->update([
-                "title" => $feedTitle ?: $subscription->title,
-                "unread_count" => $unreadCount,
-                "error_message" => null,
-                "last_error_at" => null,
-            ]);
-
-            $result->setSuccess($newCount, $updatedCount);
-            DB::commit();
-
-            return $result;
         } catch (\Exception $e) {
-            DB::rollBack();
-            
-            // 检测数据库锁定错误
-            $isDatabaseLocked = stripos($e->getMessage(), 'database is locked') !== false 
-                             || stripos($e->getMessage(), 'SQLSTATE[HY000]') !== false;
-
-            if ($isDatabaseLocked && $attempt < $maxRetries) {
-                Log::warning("数据库锁定 [{$subscription->id}]，第 {$attempt} 次重试，等待 {$retryDelay} 秒");
-                sleep($retryDelay);
-                continue;
-            }
-
             $result->addError($e->getMessage());
             $this->updateSubscriptionError($subscription, $e->getMessage());
             Log::error(
@@ -147,9 +152,23 @@ class RefreshSubscriptionService
                 ],
             );
         }
-    }
 
         return $result;
+    }
+
+    private function updateSubscriptionInfo(Subscription $subscription): void
+    {
+        $feedTitle = $this->parser->getTitle();
+        $unreadCount = Article::where("feed_id", $subscription->id)
+            ->where("read", false)
+            ->count();
+
+        $subscription->update([
+            "title" => $feedTitle ?: $subscription->title,
+            "unread_count" => $unreadCount,
+            "error_message" => null,
+            "last_error_at" => null,
+        ]);
     }
 
     private function syncArticle(Subscription $subscription, $item): string
