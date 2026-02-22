@@ -5,7 +5,7 @@ import Sidebar from '@/components/Layout/Sidebar';
 import { Button } from '@/components/ui/button';
 import ArticleList from '@/components/Article/ArticleList';
 import ArticleContent from '@/components/Article/ArticleContent';
-import { RefreshCw, Loader2, Menu, Search, X } from 'lucide-react';
+import { RefreshCw, Loader2, Menu, Search, X, ArrowLeft, ChevronRight } from 'lucide-react';
 
 export default function ArticleIndex({ articles: initialArticles, filters, allTags, subscriptions }) {
     const { props } = usePage();
@@ -22,6 +22,14 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
     const [searchQuery, setSearchQuery] = useState(filters.search || '');
     const [isSearching, setIsSearching] = useState(false);
     const searchInputRef = useRef(null);
+    
+    // 是否为移动端
+    const [isMobile, setIsMobile] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return window.innerWidth < 768;
+        }
+        return false;
+    });
     
     // 计算页面标题
     const pageTitle = useMemo(() => {
@@ -63,83 +71,86 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
         }
         return 'normal';
     });
+    
+    // 移动端视图状态: 'list' | 'content'
+    const [mobileView, setMobileView] = useState('list');
 
     const currentSubscription = subscriptions?.find(s => s.id === filters.subscription);
     const hasError = currentSubscription?.error_message && !currentSubscription.error_message.trim().startsWith('已刷新订阅源');
 
-    const loadMore = useCallback(() => {
-        if (loading || currentPage >= lastPage) return;
-        
-        setLoading(true);
-        const nextPage = currentPage + 1;
-        
-        const params = new URLSearchParams();
-        Object.entries(filters).forEach(([key, value]) => {
-            if (value !== null && value !== undefined) {
-                params.set(key, value);
-            }
-        });
-        params.set('page', nextPage);
-        
-        router.get(`/articles?${params.toString()}`, {}, {
-            preserveState: true,
-            preserveScroll: true,
-            only: ['articles'],
-            onSuccess: (page) => {
-                const newArticles = page.props.articles.data || [];
-                // 去重：过滤掉已存在的文章
-                setArticles(prev => {
-                    const existingIds = new Set(prev.map(a => a.id));
-                    const uniqueNewArticles = newArticles.filter(a => !existingIds.has(a.id));
-                    return [...prev, ...uniqueNewArticles];
-                });
-                setCurrentPage(page.props.articles.current_page);
-                setLastPage(page.props.articles.last_page);
-                setTotal(page.props.articles.total);
-                setLoading(false);
-            },
-            onError: () => setLoading(false)
-        });
-    }, [loading, currentPage, lastPage, filters]);
-
     const listRef = useRef(null);
-    const hasScrolledRef = useRef(false);
+    const loadingRef = useRef(loading);
+    const currentPageRef = useRef(currentPage);
+    const lastPageRef = useRef(lastPage);
+    
+    // 保持 ref 同步
+    useEffect(() => {
+        loadingRef.current = loading;
+        currentPageRef.current = currentPage;
+        lastPageRef.current = lastPage;
+    }, [loading, currentPage, lastPage]);
     
     useEffect(() => {
         if (!listRef.current) return;
         
+        const container = listRef.current;
+        let isLoading = false;
+        
         const handleScroll = () => {
-            if (listRef.current && listRef.current.scrollTop > 50) {
-                hasScrolledRef.current = true;
+            if (isLoading) return;
+            
+            const { scrollTop, scrollHeight, clientHeight } = container;
+            const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+            
+            if (isNearBottom && !loadingRef.current && currentPageRef.current < lastPageRef.current) {
+                isLoading = true;
+                setLoading(true);
+                
+                const nextPage = currentPageRef.current + 1;
+                
+                const params = new URLSearchParams();
+                Object.entries(filters).forEach(([key, value]) => {
+                    if (value !== null && value !== undefined) {
+                        params.set(key, value);
+                    }
+                });
+                params.set('page', nextPage);
+                
+                fetch(`/articles?${params.toString()}`, {
+                    headers: {
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
+                    },
+                })
+                .then(response => response.json())
+                .then(data => {
+                    const newArticles = data.articles?.data || data.data || [];
+                    setArticles(prev => {
+                        const existingIds = new Set(prev.map(a => a.id));
+                        const uniqueNewArticles = newArticles.filter(a => !existingIds.has(a.id));
+                        return [...prev, ...uniqueNewArticles];
+                    });
+                    setCurrentPage(data.articles?.current_page || data.current_page || nextPage);
+                    setLastPage(data.articles?.last_page || data.last_page || 1);
+                    setTotal(data.articles?.total || data.total || 0);
+                })
+                .catch(err => {
+                    console.error('Failed to load more articles:', err);
+                })
+                .finally(() => {
+                    setLoading(false);
+                    isLoading = false;
+                });
             }
         };
         
-        listRef.current.addEventListener('scroll', handleScroll);
-        
-        const observer = new IntersectionObserver(
-            (entries) => {
-                const container = listRef.current;
-                const isNearBottom = container && 
-                    (container.scrollHeight - container.scrollTop - container.clientHeight) < 300;
-                
-                if (entries[0].isIntersecting && !loading && currentPage < lastPage && 
-                    (hasScrolledRef.current || isNearBottom)) {
-                    loadMore();
-                }
-            },
-            { root: listRef.current, threshold: 0.1 }
-        );
-        
-        const sentinel = document.getElementById('scroll-sentinel');
-        if (sentinel) observer.observe(sentinel);
+        container.addEventListener('scroll', handleScroll);
         
         return () => {
-            observer.disconnect();
-            if (listRef.current) {
-                listRef.current.removeEventListener('scroll', handleScroll);
-            }
+            container.removeEventListener('scroll', handleScroll);
         };
-    }, [loadMore, loading, currentPage, lastPage]);
+    }, [filters]);
 
     const prevFiltersRef = useRef(filters);
     const prevDataVersionRef = useRef(null);
@@ -173,13 +184,18 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
     }, [initialArticles, filters]);
 
     useEffect(() => {
-        const checkMobile = () => {
-            if (window.innerWidth < 768 && sidebarMode === 'normal') {
-                setSidebarMode('hidden');
+        const handleResize = () => {
+            const mobile = window.innerWidth < 768;
+            setIsMobile(mobile);
+            
+            if (mobile) {
+                if (sidebarMode === 'normal') {
+                    setSidebarMode('hidden');
+                }
             }
         };
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
     }, [sidebarMode]);
 
     // 侧边栏切换
@@ -264,6 +280,12 @@ export default function ArticleIndex({ articles: initialArticles, filters, allTa
 
 const handleArticleClick = (article) => {
     setSelectedArticle(article);
+    
+    // 移动端切换到内容视图
+    if (isMobile) {
+        setMobileView('content');
+    }
+    
     if (!article.read) {
         fetch(`/articles/${article.id}/read`, {
             method: 'POST',
@@ -281,6 +303,12 @@ const handleArticleClick = (article) => {
             router.reload({ only: ['subscriptions'] });
         }).catch(err => console.error('Failed to mark as read:', err));
     }
+};
+
+// 移动端返回列表
+const handleMobileBack = () => {
+    setMobileView('list');
+    setSelectedArticle(null);
 };
 
     const handleMarkAsFavorite = async (id) => {
@@ -404,8 +432,12 @@ const handleArticleClick = (article) => {
             )}
             
             <div className="flex h-[calc(100vh-60px)]">
-                {/* 中栏 */}
-                <div className="w-[420px] border-r border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-800">
+                {/* 中栏 - 移动端根据 mobileView 控制显示 */}
+                <div className={`${
+                    isMobile 
+                        ? `w-full ${mobileView === 'content' ? 'hidden md:flex' : 'flex'}`
+                        : 'w-[420px] min-w-0'
+                } border-r border-gray-200 dark:border-gray-700 flex flex-col bg-white dark:bg-gray-800 overflow-hidden`}>
                     <div className="p-3 border-b border-gray-200 dark:border-gray-700 space-y-3">
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -549,15 +581,32 @@ const handleArticleClick = (article) => {
                     </div>
                 </div>
                 
-                {/* 右栏 */}
-                <div className="flex-1 bg-gray-50 dark:bg-gray-900">
+                {/* 右栏 - 移动端根据 mobileView 控制显示 */}
+                <div className={`${
+                    isMobile 
+                        ? `w-full ${mobileView === 'content' ? 'flex' : 'hidden md:flex'}`
+                        : 'flex-1'
+                } flex-col bg-gray-50 dark:bg-gray-900`}>
+                    {/* 移动端顶部导航 */}
+                    {isMobile && mobileView === 'content' && selectedArticle && (
+                        <div className="flex items-center gap-2 p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                            <button
+                                onClick={handleMobileBack}
+                                className="p-1.5 rounded-md text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700"
+                            >
+                                <ArrowLeft className="h-5 w-5" />
+                            </button>
+                            <h3 className="text-sm font-medium truncate flex-1">{selectedArticle.title}</h3>
+                        </div>
+                    )}
+                    
                     {selectedArticle ? (
                         <ArticleContent
                             article={selectedArticle}
                             onFavorite={() => handleMarkAsFavorite(selectedArticle.id)}
                         />
                     ) : (
-                        <div className="flex items-center justify-center h-full text-gray-500">
+                        <div className="hidden md:flex items-center justify-center h-full text-gray-500">
                             <div className="text-center">
                                 <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
