@@ -29,12 +29,15 @@ class RefreshSubscriptionService
     public function refresh(Subscription $subscription): RefreshResult
     {
         $result = new RefreshResult($subscription);
+        $maxRetries = 3;
+        $retryDelay = 10;
 
-        try {
-            DB::beginTransaction();
-            Log::info("获取订阅源 {$subscription->id} {$subscription->url} 中");
-            // 获取并清理原始数据
-            $rawData = RssParser::fetchAndCleanRawData($subscription->url);
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                DB::beginTransaction();
+                Log::info("获取订阅源 {$subscription->id} {$subscription->url} 中");
+                // 获取并清理原始数据
+                $rawData = RssParser::fetchAndCleanRawData($subscription->url);
 
             if ($rawData === null) {
                 $result->addError("无法获取 RSS 内容");
@@ -118,8 +121,21 @@ class RefreshSubscriptionService
 
             $result->setSuccess($newCount, $updatedCount);
             DB::commit();
+
+            return $result;
         } catch (\Exception $e) {
             DB::rollBack();
+            
+            // 检测数据库锁定错误
+            $isDatabaseLocked = stripos($e->getMessage(), 'database is locked') !== false 
+                             || stripos($e->getMessage(), 'SQLSTATE[HY000]') !== false;
+
+            if ($isDatabaseLocked && $attempt < $maxRetries) {
+                Log::warning("数据库锁定 [{$subscription->id}]，第 {$attempt} 次重试，等待 {$retryDelay} 秒");
+                sleep($retryDelay);
+                continue;
+            }
+
             $result->addError($e->getMessage());
             $this->updateSubscriptionError($subscription, $e->getMessage());
             Log::error(
@@ -131,6 +147,7 @@ class RefreshSubscriptionService
                 ],
             );
         }
+    }
 
         return $result;
     }
