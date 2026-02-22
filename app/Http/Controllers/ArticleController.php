@@ -86,8 +86,8 @@ class ArticleController extends Controller
             ->orderBy('label')
             ->get();
 
-        // 如果是 AJAX 请求，返回 JSON
-        if ($request->ajax() || $request->wantsJson()) {
+        // 如果是纯 AJAX 请求（非 Inertia），返回 JSON
+        if ($request->ajax() && !$request->header('X-Inertia')) {
             return response()->json([
                 'articles' => $articles,
                 'filters' => [
