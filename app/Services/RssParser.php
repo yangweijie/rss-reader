@@ -96,12 +96,22 @@ class RssParser
         // 修复未闭合的 CDATA
         $content = preg_replace('/<!\[CDATA\[(?![^\]]*\]\]>)/s', '<![CDATA[]]>', $content);
 
-        // 移除 CDATA 标签，保留内容
-        $content = preg_replace('/<!\[CDATA\[/s', '', $content);
-        $content = preg_replace('/\]\]>/s', '', $content);
+        // 移除 CDATA 标签，保留内容（移除内部可能的非法字符）
+        $content = preg_replace_callback('/<!\[CDATA\[(.*?)\]\]>/s', function($matches) {
+            return $matches[1]; // 移除 CDATA 标签，保留内容
+        }, $content);
 
-        // 移除控制字符
+        // 移除所有控制字符（除了换行和制表符）
         $content = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', $content);
+
+        // 移除无效的 XML 标签（包含非法字符的标签名）
+        $content = preg_replace('/<\/?[^a-zA-Z_:][^>]*>/s', '', $content);
+
+        // 修复无效的标签属性值
+        $content = preg_replace('/=\s*([^\s"\'<>]+)/s', '="$1"', $content);
+
+        // 移除重复的空格
+        $content = preg_replace('/\s+/', ' ', $content);
 
         // 修复多重 XML 声明
         $content = preg_replace('/(<\?xml[^>]*\?>)/s', '$1', $content);
