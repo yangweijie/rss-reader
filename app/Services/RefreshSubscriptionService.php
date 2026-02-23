@@ -319,9 +319,72 @@ class RefreshSubscriptionService
                 escapeshellarg("scripts/fetch_rss_with_selenium.py") .
                 " " .
                 escapeshellarg($url);
-            $output = shell_exec($command . " 2>&1");
+            
+            // 添加超时控制，使用 proc_open 替代 shell_exec
+            $descriptorspec = [
+                0 => ['pipe', 'r'],  // stdin
+                1 => ['pipe', 'w'],  // stdout
+                2 => ['pipe', 'w'],  // stderr
+            ];
 
-            chdir($oldDir);
+            $process = proc_open($command, $descriptorspec, $pipes);
+
+            if (is_resource($process)) {
+                // 设置 60 秒超时
+                $timeout = 60;
+                $startTime = time();
+                $output = '';
+
+                // 非阻塞读取
+                stream_set_blocking($pipes[1], false);
+                stream_set_blocking($pipes[2], false);
+
+                while (true) {
+                    // 检查进程是否结束
+                    $status = proc_get_status($process);
+                    if (!$status['running']) {
+                        break;
+                    }
+
+                    // 检查超时
+                    if (time() - $startTime > $timeout) {
+                        Log::warning("Selenium: 获取超时 {$url}");
+                        proc_terminate($process, 9);
+                        break;
+                    }
+
+                    // 读取输出
+                    $read = [$pipes[1], $pipes[2]];
+                    $write = [];
+                    $except = [];
+                    $streamResult = stream_select($read, $write, $except, 1, 0);
+
+                    if ($streamResult !== false && $streamResult > 0) {
+                        foreach ($read as $pipe) {
+                            $chunk = fread($pipe, 4096);
+                            if ($chunk !== false) {
+                                $output .= $chunk;
+                            }
+                        }
+                    }
+
+                    usleep(100000); // 100ms
+                }
+
+                // 关闭管道
+                fclose($pipes[0]);
+                fclose($pipes[1]);
+                fclose($pipes[2]);
+                proc_close($process);
+
+                chdir($oldDir);
+
+                Log::info("Selenium: 命令执行完成，输出长度: " . strlen($output));
+            } else {
+                Log::error("Selenium: 无法启动进程");
+                chdir($oldDir);
+                return null;
+            }
 
             if (!empty($output)) {
                 $output = html_entity_decode(
@@ -350,6 +413,7 @@ class RefreshSubscriptionService
                 }
             }
 
+            Log::warning("Selenium: 未找到有效的 RSS 内容");
             return null;
         } catch (\Exception $e) {
             Log::error("Selenium 获取 RSS 异常: " . $e->getMessage());
