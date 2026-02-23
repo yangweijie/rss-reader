@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Folder } from 'lucide-react';
 
-export default function CategoryDialog({ open, onOpenChange, onSuccess }) {
+export default function CategoryDialog({ open, onOpenChange, onSuccess, categories = [] }) {
     const [name, setName] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState('');
@@ -21,8 +21,20 @@ export default function CategoryDialog({ open, onOpenChange, onSuccess }) {
     const handleSubmit = (e) => {
         e.preventDefault();
         
-        if (!name.trim()) {
+        const trimmedName = name.trim();
+        
+        if (!trimmedName) {
             setError('请输入文件夹名称');
+            return;
+        }
+
+        // 检查名称是否重复
+        const isDuplicate = categories.some(cat => 
+            cat.label.toLowerCase() === trimmedName.toLowerCase()
+        );
+        
+        if (isDuplicate) {
+            setError('文件夹名称已存在');
             return;
         }
 
@@ -37,14 +49,17 @@ export default function CategoryDialog({ open, onOpenChange, onSuccess }) {
                 'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '',
             },
-            body: JSON.stringify({ label: name.trim() }),
+            body: JSON.stringify({ label: trimmedName }),
         })
             .then((response) => response.json())
             .then((data) => {
+                console.log('创建文件夹返回数据:', data);
                 if (data.success) {
                     setName('');
                     onSuccess?.(data.category);
                     onOpenChange(false);
+                    // 刷新侧边栏数据
+                    router.reload({ only: ['categories'] });
                 } else {
                     setError(data.message || '创建失败');
                 }

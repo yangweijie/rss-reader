@@ -150,6 +150,7 @@ export default function Edit({ subscription, categories }) {
                 open={isCategoryDialogOpen}
                 onOpenChange={setIsCategoryDialogOpen}
                 onSuccess={handleCategoryCreated}
+                categories={categories}
             />
         </DashboardLayout>
     );

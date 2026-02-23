@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Head, Link, router, usePage } from '@inertiajs/react';
 import DashboardLayout from '@/components/Layout/DashboardLayout';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,13 @@ export default function SubscriptionCreate({ category, categories }) {
     const [newFolderName, setNewFolderName] = useState('');
     const [localCategories, setLocalCategories] = useState(categories);
     const [errors, setErrors] = useState({});
+    const [selectedCategoryId, setSelectedCategoryId] = useState(categoryId || '');
+    const [selectKey, setSelectKey] = useState(0); // 强制重新渲染 Select
+
+    // 当 category_id 变化时，同步更新 formData
+    useEffect(() => {
+        setFormData(prev => ({ ...prev, category_id: selectedCategoryId }));
+    }, [selectedCategoryId]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -58,23 +65,48 @@ export default function SubscriptionCreate({ category, categories }) {
     const handleCreateFolder = () => {
         if (!newFolderName.trim()) return;
 
+        // 检查名称是否重复
+        const isDuplicate = localCategories.some(cat => 
+            cat.label.toLowerCase() === newFolderName.trim().toLowerCase()
+        );
+        
+        if (isDuplicate) {
+            alert('文件夹名称已存在');
+            return;
+        }
+
         fetch('/categories', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content,
             },
             body: JSON.stringify({ label: newFolderName })
         })
         .then(res => res.json())
         .then(data => {
-            if (data.id) {
-                const newCategory = { id: data.id, label: data.label || newFolderName, parent_id: null };
+            console.log('创建文件夹返回数据:', data);
+            if (data.category?.id || data.id) {
+                const categoryId = data.category?.id || data.id;
+                const categoryLabel = data.category?.label || data.label || newFolderName;
+                const newCategory = { id: categoryId, label: categoryLabel, parent_id: null };
+                console.log('新文件夹对象:', newCategory);
+                console.log('更新后的分类列表:', [...localCategories, newCategory]);
+                console.log('设置的 category_id:', String(categoryId));
                 setLocalCategories([...localCategories, newCategory]);
-                setFormData({ ...formData, category_id: String(data.id) });
                 setNewFolderName('');
                 setShowNewFolderDialog(false);
+                // 强制重新渲染 Select 组件
+                setSelectKey(prev => prev + 1);
+                // 延迟设置选中的文件夹，确保 DOM 已更新
+                setTimeout(() => {
+                    setSelectedCategoryId(String(categoryId));
+                    console.log('延迟设置后的 selectedCategoryId:', String(categoryId));
+                }, 0);
+                // 刷新侧边栏数据
+                router.reload({ only: ['categories'] });
             }
         })
         .catch(err => console.error('Failed to create folder:', err));
@@ -110,8 +142,12 @@ export default function SubscriptionCreate({ category, categories }) {
                                 <Label>所属文件夹</Label>
                                 <div className="flex gap-2">
                                     <Select 
-                                        value={formData.category_id} 
-                                        onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+                                        key={selectKey}
+                                        value={selectedCategoryId} 
+                                        onValueChange={(value) => {
+                                            console.log('Select onValueChange:', value);
+                                            setSelectedCategoryId(value);
+                                        }}
                                     >
                                         <SelectTrigger className="flex-1">
                                             <SelectValue placeholder="选择文件夹（可选）" />
