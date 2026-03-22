@@ -1,0 +1,20 @@
+<?php
+declare(strict_types=1);
+
+namespace app\domain;
+
+use linron\thinkdto\BaseDto;
+use linron\thinkdto\attributes\Valid;
+use linron\thinkdto\attributes\DefaultVal;
+
+class TagArticleDto extends BaseDto
+{
+    #[Valid(name: 'require|integer', message: '标签ID必填')]
+    public int $tag_id;
+
+    #[DefaultVal(value: 1)]
+    public ?int $page = null;
+
+    #[DefaultVal(value: 20)]
+    public ?int $page_size = null;
+}

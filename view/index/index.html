@@ -1,0 +1,3236 @@
+<!doctype html>
+<html data-theme="light">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>QiReader - RSS阅读器</title>
+        <link href="/static/app.css" rel="stylesheet" />
+        <style>
+            /* 自定义滚动条 */
+            .custom-scroll::-webkit-scrollbar {
+                width: 6px;
+            }
+            .custom-scroll::-webkit-scrollbar-track {
+                background: transparent;
+            }
+            .custom-scroll::-webkit-scrollbar-thumb {
+                background: #d1d5db;
+                border-radius: 3px;
+            }
+            .custom-scroll::-webkit-scrollbar-thumb:hover {
+                background: #9ca3af;
+            }
+            /* 文章卡片样式 */
+            .article-card {
+                transition: all 0.15s ease;
+            }
+            .article-card:hover {
+                background-color: #f3f4f6;
+            }
+            .article-card.active {
+                background-color: #ede9fe;
+                border-left: 3px solid #6366f1;
+            }
+            /* 侧边栏项样式 */
+            .sidebar-item {
+                transition: all 0.15s ease;
+            }
+            .sidebar-item:hover {
+                background-color: #f3f4f6;
+            }
+            .sidebar-item.active {
+                background-color: #ede9fe;
+                border-left: 3px solid #6366f1;
+            }
+            /* 右键菜单 */
+            .context-menu {
+                position: fixed;
+                z-index: 1000;
+                min-width: 160px;
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+                padding: 4px 0;
+            }
+            .context-menu-item {
+                padding: 8px 16px;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .context-menu-item:hover {
+                background-color: #f3f4f6;
+            }
+            .context-menu-item.danger {
+                color: #ef4444;
+            }
+            .context-menu-item.danger:hover {
+                background-color: #fef2f2;
+            }
+            /* 响应式隐藏 */
+            @media (max-width: 768px) {
+                .sidebar-desktop {
+                    display: none !important;
+                }
+                .article-detail-desktop {
+                    display: none !important;
+                }
+            }
+            @media (min-width: 769px) {
+                .sidebar-mobile {
+                    display: none !important;
+                }
+                .bottom-nav {
+                    display: none !important;
+                }
+                .article-detail-mobile {
+                    display: none !important;
+                }
+                .article-detail-desktop {
+                    display: flex !important;
+                }
+            }
+            /* 文章内容样式 */
+            .article-content {
+                font-size: 16px;
+                line-height: 1.8;
+            }
+            .article-content img {
+                max-width: 100%;
+                height: auto;
+                border-radius: 8px;
+                margin: 24px 0;
+                display: block;
+            }
+            .article-content p {
+                margin-bottom: 20px;
+                line-height: 1.8;
+            }
+            .article-content h1,
+            .article-content h2,
+            .article-content h3,
+            .article-content h4 {
+                margin-top: 32px;
+                margin-bottom: 16px;
+                font-weight: 600;
+                line-height: 1.4;
+            }
+            .article-content h1 {
+                font-size: 1.5em;
+            }
+            .article-content h2 {
+                font-size: 1.3em;
+            }
+            .article-content h3 {
+                font-size: 1.15em;
+            }
+            .article-content h4 {
+                font-size: 1em;
+            }
+            .article-content a {
+                color: #3b82f6;
+                text-decoration: none;
+            }
+            .article-content a:hover {
+                text-decoration: underline;
+            }
+            .article-content blockquote {
+                border-left: 4px solid #e5e7eb;
+                padding-left: 16px;
+                margin: 20px 0;
+                color: #6b7280;
+                font-style: italic;
+            }
+            .article-content pre {
+                background: #f3f4f6;
+                padding: 16px;
+                border-radius: 8px;
+                overflow-x: auto;
+                margin: 20px 0;
+            }
+            .article-content code {
+                background: #f3f4f6;
+                padding: 2px 6px;
+                border-radius: 4px;
+                font-size: 0.9em;
+            }
+            .article-content pre code {
+                background: none;
+                padding: 0;
+            }
+            .article-content ul,
+            .article-content ol {
+                margin: 16px 0;
+                padding-left: 24px;
+            }
+            .article-content li {
+                margin-bottom: 8px;
+            }
+        </style>
+    </head>
+    <body class="bg-base-200 h-screen overflow-hidden">
+        <!-- 主容器 -->
+        <div class="h-full flex">
+            <!-- 左侧边栏 - 桌面端 -->
+            <aside
+                class="sidebar-desktop w-64 bg-base-100 border-r border-base-300 flex flex-col shrink-0"
+            >
+                <!-- 顶部导航 -->
+                <div
+                    class="p-3 border-b border-base-300 flex items-center justify-between"
+                >
+                    <span class="font-bold text-lg text-primary">QiReader</span>
+                    <div class="flex items-center gap-1">
+                        <!-- 夜间模式切换 -->
+                        <button
+                            class="btn btn-ghost btn-sm btn-circle"
+                            onclick="toggleTheme()"
+                            title="切换主题"
+                        >
+                            <svg
+                                id="themeIconLight"
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+                                />
+                            </svg>
+                            <svg
+                                id="themeIconDark"
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-5 w-5 hidden"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+                                />
+                            </svg>
+                        </button>
+                        <button
+                            class="btn btn-ghost btn-sm btn-circle"
+                            onclick="showSettings()"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-5 w-5"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                                />
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <!-- 导航列表 -->
+                <nav
+                    id="sidebarNav"
+                    class="flex-1 overflow-y-auto custom-scroll px-2 pb-2"
+                >
+                    <!-- 全部 -->
+                    <div
+                        class="sidebar-item active rounded-lg px-3 py-2 cursor-pointer flex items-center justify-between"
+                        data-type="all"
+                        onclick="selectNav('all')"
+                    >
+                        <div class="flex items-center gap-2">
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-4 w-4"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                                />
+                            </svg>
+                            <span>全部</span>
+                        </div>
+                        <span
+                            id="allUnread"
+                            class="text-xs bg-base-300 px-2 py-0.5 rounded-full"
+                            >0</span
+                        >
+                    </div>
+                    <!-- 稍后阅读 -->
+                    <div
+                        class="sidebar-item rounded-lg px-3 py-2 cursor-pointer flex items-center gap-2"
+                        data-type="starred"
+                        onclick="selectNav('starred')"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                            />
+                        </svg>
+                        <span>稍后阅读</span>
+                    </div>
+                    <!-- 标签 -->
+                    <div
+                        class="sidebar-item rounded-lg px-3 py-2 cursor-pointer flex items-center gap-2"
+                        data-type="tags"
+                        onclick="toggleSection('tags')"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                            />
+                        </svg>
+                        <span>标签</span>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-3 w-3 ml-auto transition-transform"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            id="tagsArrow"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M19 9l-7 7-7-7"
+                            />
+                        </svg>
+                    </div>
+                    <div id="tagsList" class="hidden pl-4 space-y-1"></div>
+
+                    <!-- 订阅源区域 -->
+                    <div class="mt-4">
+                        <!-- 订阅源标题栏 -->
+                        <div
+                            class="px-2 py-1 flex items-center justify-between mb-1"
+                        >
+                            <span
+                                class="font-medium text-sm text-base-content/70"
+                                >订阅源</span
+                            >
+                            <div class="flex items-center gap-0.5">
+                                <button
+                                    class="btn btn-ghost btn-xs btn-circle"
+                                    onclick="showAddFeed()"
+                                    title="添加订阅"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        class="h-4 w-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M12 4v16m8-8H4"
+                                        />
+                                    </svg>
+                                </button>
+                                <button
+                                    class="btn btn-ghost btn-xs btn-circle"
+                                    onclick="showFeedsMenu(event)"
+                                >
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        class="h-4 w-4"
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                    >
+                                        <path
+                                            stroke-linecap="round"
+                                            stroke-linejoin="round"
+                                            stroke-width="2"
+                                            d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"
+                                        />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <!-- 订阅源按分类分组 -->
+                        <div id="feedsByCategory" class="space-y-1"></div>
+                    </div>
+                </nav>
+            </aside>
+
+            <!-- 文章列表区 -->
+            <main
+                class="flex flex-col bg-base-100 overflow-hidden"
+                style="flex: none; width: 384px"
+            >
+                <!-- 列表头部 -->
+                <header
+                    class="p-3 border-b border-base-300 flex flex-col gap-2 shrink-0"
+                >
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <!-- 移动端菜单按钮 -->
+                            <button
+                                class="btn btn-ghost btn-sm btn-circle md:hidden"
+                                onclick="toggleMobileSidebar()"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-5 w-5"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M4 6h16M4 12h16M4 18h16"
+                                    />
+                                </svg>
+                            </button>
+                            <h1 id="currentTitle" class="font-semibold text-lg">
+                                全部
+                            </h1>
+                            <span
+                                id="currentCount"
+                                class="text-sm text-base-content/60"
+                                >0</span
+                            >
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button
+                                class="btn btn-ghost btn-sm"
+                                onclick="markAllRead()"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 13l4 4L19 7"
+                                    />
+                                </svg>
+                                标记已读
+                            </button>
+                            <button
+                                class="btn btn-ghost btn-sm btn-circle"
+                                onclick="refreshFeed()"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                                    />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- 搜索框 -->
+                    <div class="relative">
+                        <input
+                            type="text"
+                            id="searchInput"
+                            placeholder="搜索文章..."
+                            class="input input-bordered input-sm w-full pl-9"
+                            onkeydown="
+                                if (event.key === 'Enter') searchArticles();
+                            "
+                        />
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-base-content/40"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                            />
+                        </svg>
+                        <button
+                            id="clearSearchBtn"
+                            class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 hidden"
+                            onclick="clearSearch()"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-3 w-3"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12"
+                                />
+                            </svg>
+                        </button>
+                    </div>
+                </header>
+                <!-- 文章列表 -->
+                <div
+                    id="articleList"
+                    class="flex-1 overflow-y-auto custom-scroll"
+                    onscroll="onArticleListScroll()"
+                >
+                    <div class="divide-y divide-base-200">
+                        <!-- 文章卡片将通过JS动态插入 -->
+                    </div>
+                    <!-- 加载更多 -->
+                    <div id="loadMore" class="p-4 text-center hidden">
+                        <span class="loading loading-spinner loading-md"></span>
+                    </div>
+                    <!-- 空状态 -->
+                    <div
+                        id="emptyState"
+                        class="flex flex-col items-center justify-center h-full text-base-content/40"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-16 w-16 mb-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="1"
+                                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                            />
+                        </svg>
+                        <p>暂无文章</p>
+                    </div>
+                </div>
+            </main>
+
+            <!-- 文章详情区 - 桌面端 -->
+            <article
+                class="article-detail-desktop bg-base-100 border-l border-base-300 flex flex-col flex-1"
+            >
+                <!-- 详情头部 -->
+                <header
+                    class="p-3 border-b border-base-300 flex items-center gap-2 shrink-0"
+                >
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="prevArticle()"
+                        id="prevBtn"
+                        disabled
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M15 19l-7-7 7-7"
+                            />
+                        </svg>
+                    </button>
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="nextArticle()"
+                        id="nextBtn"
+                        disabled
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M9 5l7 7-7 7"
+                            />
+                        </svg>
+                    </button>
+                    <button
+                        class="btn btn-ghost btn-sm"
+                        onclick="openOriginal()"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                            />
+                        </svg>
+                        原文
+                    </button>
+                    <div class="flex-1"></div>
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="toggleStar()"
+                        id="starBtn"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                            />
+                        </svg>
+                    </button>
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="toggleRead()"
+                        id="readBtn"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76"
+                            />
+                        </svg>
+                    </button>
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="shareArticle()"
+                        id="shareBtn"
+                        title="分享文章"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684"
+                            />
+                        </svg>
+                    </button>
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="translateArticle()"
+                        id="translateBtn"
+                        title="翻译全文"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-4 w-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"
+                            />
+                        </svg>
+                    </button>
+                </header>
+                <!-- 详情内容 -->
+                <div
+                    id="articleDetail"
+                    class="flex-1 overflow-y-auto custom-scroll px-8 py-6 flex justify-center"
+                >
+                    <div class="text-center text-base-content/40 py-16">
+                        <p>选择一篇文章查看详情</p>
+                    </div>
+                </div>
+            </article>
+        </div>
+
+        <!-- 移动端侧边栏 -->
+        <div
+            id="mobileSidebar"
+            class="sidebar-mobile fixed inset-0 z-50 hidden"
+        >
+            <div
+                class="absolute inset-0 bg-black/50"
+                onclick="toggleMobileSidebar()"
+            ></div>
+            <aside
+                class="absolute left-0 top-0 bottom-0 w-64 bg-base-100 flex flex-col"
+            >
+                <!-- 移动端侧边栏内容与桌面端类似 -->
+                <div
+                    class="p-3 border-b border-base-300 flex items-center justify-between"
+                >
+                    <span class="font-bold text-lg text-primary">QiReader</span>
+                    <button
+                        class="btn btn-ghost btn-sm btn-circle"
+                        onclick="toggleMobileSidebar()"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-5 w-5"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M6 18L18 6M6 6l12 12"
+                            />
+                        </svg>
+                    </button>
+                </div>
+                <nav
+                    id="mobileSidebarNav"
+                    class="flex-1 overflow-y-auto custom-scroll p-2"
+                >
+                    <!-- 导航项将通过JS复制 -->
+                </nav>
+            </aside>
+        </div>
+
+        <!-- 移动端底部导航 -->
+        <nav
+            class="bottom-nav fixed bottom-0 left-0 right-0 bg-base-100 border-t border-base-300 flex justify-around py-2 z-40"
+        >
+            <button
+                class="btn btn-ghost flex-1 flex-col gap-1 h-auto py-2"
+                onclick="selectNav('all')"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                    />
+                </svg>
+                <span class="text-xs">全部</span>
+            </button>
+            <button
+                class="btn btn-ghost flex-1 flex-col gap-1 h-auto py-2"
+                onclick="selectNav('starred')"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                    />
+                </svg>
+                <span class="text-xs">稍后</span>
+            </button>
+            <button
+                class="btn btn-ghost flex-1 flex-col gap-1 h-auto py-2"
+                onclick="selectNav('tags')"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
+                    />
+                </svg>
+                <span class="text-xs">标签</span>
+            </button>
+            <button
+                class="btn btn-ghost flex-1 flex-col gap-1 h-auto py-2"
+                onclick="selectNav('feeds')"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                >
+                    <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z"
+                    />
+                </svg>
+                <span class="text-xs">订阅</span>
+            </button>
+        </nav>
+
+        <!-- 右键菜单 -->
+        <div id="contextMenu" class="context-menu hidden"></div>
+
+        <!-- 添加订阅模态框 -->
+        <dialog id="addFeedModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">添加订阅</h3>
+                <input
+                    type="text"
+                    id="feedUrl"
+                    placeholder="输入网站地址或RSS链接"
+                    class="input input-bordered w-full"
+                />
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn btn-ghost">取消</button>
+                    </form>
+                    <button class="btn btn-primary" onclick="discoverFeed()">
+                        发现
+                    </button>
+                </div>
+                <!-- 发现结果 -->
+                <div id="discoverResult" class="mt-4 hidden">
+                    <div class="divider">发现订阅源</div>
+                    <div id="discoverList" class="space-y-2"></div>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+
+        <!-- 标签管理模态框 -->
+        <dialog id="tagModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">管理标签</h3>
+                <div
+                    id="articleTagList"
+                    class="space-y-2 mb-4 max-h-60 overflow-y-auto"
+                >
+                    <!-- 标签列表将通过 JS 渲染 -->
+                </div>
+                <div class="flex gap-2">
+                    <input
+                        type="text"
+                        id="newTagName"
+                        placeholder="新标签名称"
+                        class="input input-bordered flex-1"
+                    />
+                    <button
+                        class="btn btn-primary"
+                        onclick="createTagAndAssign()"
+                    >
+                        创建并添加
+                    </button>
+                </div>
+                <div class="modal-action">
+                    <button class="btn" onclick="closeTagModal()">完成</button>
+                </div>
+            </div>
+        </dialog>
+
+        <!-- 添加分类模态框 -->
+        <dialog id="addCategoryModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">添加分类</h3>
+                <input
+                    type="text"
+                    id="categoryName"
+                    placeholder="分类名称"
+                    class="input input-bordered w-full"
+                />
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn btn-ghost">取消</button>
+                    </form>
+                    <button class="btn btn-primary" onclick="doAddCategory()">
+                        添加
+                    </button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+
+        <!-- 重命名模态框 -->
+        <dialog id="renameModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">重命名</h3>
+                <input
+                    type="text"
+                    id="renameInput"
+                    class="input input-bordered w-full"
+                />
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn btn-ghost">取消</button>
+                    </form>
+                    <button class="btn btn-primary" onclick="confirmRename()">
+                        确定
+                    </button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+
+        <!-- 移动订阅源模态框 -->
+        <dialog id="moveFeedModal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4 flex items-center gap-2">
+                    <button class="btn btn-ghost btn-sm btn-circle" onclick="closeMoveFeedModal()">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                        </svg>
+                    </button>
+                    <span>移动到</span>
+                </h3>
+                <div id="moveFeedCategoryList" class="space-y-1 max-h-64 overflow-y-auto mb-4">
+                    <!-- 分类列表将通过 JS 渲染 -->
+                </div>
+                <div class="border-t border-base-300 pt-4">
+                    <div class="flex gap-2">
+                        <input
+                            type="text"
+                            id="newCategoryInMove"
+                            placeholder="文件夹名称"
+                            class="input input-bordered flex-1 input-sm"
+                        />
+                        <button class="btn btn-primary btn-sm" onclick="createCategoryInMove()">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+
+        <!-- 导入 OPML 模态框 -->
+        <dialog id="importModal" class="modal">
+            <div class="modal-box max-w-lg">
+                <h3 class="font-bold text-lg mb-4">导入订阅源</h3>
+                <div
+                    id="importDropZone"
+                    class="border-2 border-dashed border-base-300 rounded-xl p-8 text-center hover:border-primary hover:bg-base-200/50 transition-colors cursor-pointer"
+                    onclick="document.getElementById('importFileInput').click()"
+                    ondragover="handleImportDragOver(event)"
+                    ondragleave="handleImportDragLeave(event)"
+                    ondrop="handleImportDrop(event)"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        class="h-12 w-12 mx-auto mb-3 text-base-content/50"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                    >
+                        <path
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-width="1.5"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
+                        />
+                    </svg>
+                    <p class="text-base-content/70 mb-2">
+                        点击选择或拖拽 OPML 文件到这里
+                    </p>
+                    <p class="text-xs text-base-content/50">
+                        支持 .opml, .xml 格式
+                    </p>
+                    <input
+                        type="file"
+                        id="importFileInput"
+                        class="hidden"
+                        accept=".opml,.xml"
+                        onchange="handleImportFileSelect(event)"
+                    />
+                </div>
+                <!-- 导入结果 -->
+                <div id="importResult" class="mt-4 hidden">
+                    <div class="divider">导入结果</div>
+                    <div id="importStatus" class="text-center py-4">
+                        <span class="loading loading-spinner loading-md"></span>
+                        <p class="text-sm text-base-content/60 mt-2">
+                            正在导入...
+                        </p>
+                    </div>
+                    <div id="importSuccess" class="hidden text-center py-4">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            class="h-10 w-10 mx-auto text-success mb-2"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                            />
+                        </svg>
+                        <p class="font-medium">导入成功</p>
+                        <p
+                            id="importCount"
+                            class="text-sm text-base-content/60"
+                        ></p>
+                    </div>
+                    <div id="importError" class="hidden">
+                        <div class="alert alert-error text-sm">
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                class="h-5 w-5 shrink-0"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            <span id="importErrorMsg">导入失败</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-action">
+                    <form method="dialog">
+                        <button class="btn" onclick="resetImportModal()">
+                            关闭
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button onclick="resetImportModal()">close</button>
+            </form>
+        </dialog>
+
+        <script src="/static/app.js"></script>
+        <script>
+            // 全局状态
+            const state = {
+                currentType: "all", // all, starred, tag, category, feed
+                currentId: null, // tag_id, category_id, feed_id
+                articles: [],
+                currentIndex: -1,
+                page: 1,
+                pageSize: 20,
+                total: 0,
+                categories: [],
+                tags: [],
+                feeds: [],
+                isLoading: false, // 防止重复加载
+                keyword: "", // 搜索关键词
+            };
+
+            // 初始化
+            document.addEventListener("DOMContentLoaded", async () => {
+                // 检查登录状态
+                if (!getToken()) {
+                    window.location.href = "/auth/login";
+                    return;
+                }
+
+                // 加载数据
+                await Promise.all([loadCategories(), loadTags(), loadFeeds()]);
+
+                // 加载文章
+                await loadArticles();
+            });
+
+            // 加载分类
+            async function loadCategories() {
+                const res = await ajax("/api/categories");
+                if (res.code === 0 || res.code === "success") {
+                    state.categories = res.data.list || [];
+                    // 重新渲染订阅源列表以反映新的分类顺序
+                    renderFeeds();
+                }
+            }
+
+            // 加载标签
+            async function loadTags() {
+                const res = await ajax("/api/tags");
+                if (res.code === 0 || res.code === "success") {
+                    state.tags = res.data.list || [];
+                    renderTags();
+                }
+            }
+
+            // 加载订阅源
+            async function loadFeeds() {
+                const res = await ajax("/api/feeds");
+                if (res.code === 0 || res.code === "success") {
+                    state.feeds = res.data.list || [];
+                    renderFeeds();
+                    updateAllUnread();
+                }
+            }
+
+            // 更新全部未读数
+            function updateAllUnread() {
+                const total = state.feeds.reduce(
+                    (sum, f) => sum + (f.unread_count || 0),
+                    0,
+                );
+                document.getElementById("allUnread").textContent = total;
+            }
+
+            // 渲染标签列表
+            function renderTags() {
+                const container = document.getElementById("tagsList");
+                container.innerHTML = state.tags
+                    .map(
+                        (tag) => `
+                <div class="sidebar-item rounded-lg px-3 py-1.5 cursor-pointer flex items-center justify-between"
+                     data-type="tag" data-id="${tag.id}"
+                     onclick="selectNav('tag', ${tag.id})"
+                     oncontextmenu="showTagMenu(event, ${tag.id}, '${tag.name}')">
+                    <div class="flex items-center gap-2 flex-1 overflow-hidden">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                        </svg>
+                        <span class="truncate text-sm">${tag.name}</span>
+                    </div>
+                    ${tag.article_count ? `<span class="text-xs text-base-content/60 shrink-0 ml-2">${tag.article_count}</span>` : ""}
+                </div>
+            `,
+                    )
+                    .join("");
+            }
+
+            // 渲染订阅源列表（按分类分组）
+            function renderFeeds() {
+                const container = document.getElementById("feedsByCategory");
+
+                // 按分类ID分组订阅源
+                const feedsByCat = {};
+                const uncategorized = [];
+
+                state.feeds.forEach((feed) => {
+                    if (feed.category_id && feed.category_id !== 0) {
+                        if (!feedsByCat[feed.category_id]) {
+                            feedsByCat[feed.category_id] = [];
+                        }
+                        feedsByCat[feed.category_id].push(feed);
+                    } else {
+                        uncategorized.push(feed);
+                    }
+                });
+
+                // 获取未读筛选状态
+                const unreadOnly =
+                    document.getElementById("unreadOnlyCheckbox")?.checked ||
+                    false;
+
+                let html = "";
+
+                // 渲染分类及其订阅源
+                state.categories.forEach((cat) => {
+                    const catFeeds = feedsByCat[cat.id] || [];
+                    // 空分类也显示，只在未读筛选模式下隐藏
+
+                    // 筛选未读
+                    const displayFeeds = unreadOnly
+                        ? catFeeds.filter((f) => f.unread_count > 0)
+                        : catFeeds;
+                    // 未读筛选模式下，空分类或有未读文章的分类才显示
+                    if (unreadOnly && catFeeds.length > 0 && displayFeeds.length === 0) return;
+
+                    const catUnread = catFeeds.reduce(
+                        (sum, f) => sum + (f.unread_count || 0),
+                        0,
+                    );
+                    const isExpanded =
+                        state.expandedCategories?.[cat.id] !== false; // 默认展开
+
+                    html += `
+                    <div class="category-group">
+                        <div class="sidebar-item rounded-lg px-2 py-1.5 cursor-pointer flex items-center gap-1"
+                             onclick="toggleCategory(${cat.id})"
+                             oncontextmenu="showCategoryMenu(event, ${cat.id}, '${cat.label}')">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}"
+                                 fill="none" viewBox="0 0 24 24" stroke="currentColor" id="cat-arrow-${cat.id}">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                            </svg>
+                            <span class="font-medium text-sm truncate flex-1">${cat.label}</span>
+                            ${catUnread ? `<span class="text-xs text-base-content/60">${catUnread}</span>` : ""}
+                        </div>
+                        <div id="cat-feeds-${cat.id}" class="${isExpanded ? "" : "hidden"} pl-2 space-y-0.5">
+                            ${displayFeeds
+                                .map(
+                                    (feed) => `
+                                <div class="sidebar-item rounded-lg px-3 py-1.5 cursor-pointer flex items-center justify-between"
+                                     data-type="feed" data-id="${feed.id}"
+                                     onclick="selectNav('feed', ${feed.id})"
+                                     oncontextmenu="showFeedMenu(event, ${feed.id}, '${feed.title}')">
+                                    <div class="flex items-center gap-2 flex-1 overflow-hidden">
+                                        ${
+                                            feed.icon
+                                                ? `<img src="${feed.icon}" class="w-4 h-4 rounded shrink-0" referrerPolicy="no-referrer" />`
+                                                : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                        </svg>`
+                                        }
+                                        <span class="truncate text-sm">${feed.title}</span>
+                                    </div>
+                                    ${feed.unread_count ? `<span class="text-xs text-base-content/60 shrink-0 ml-2">${feed.unread_count}</span>` : ""}
+                                </div>
+                            `,
+                                )
+                                .join("")}
+                        </div>
+                    </div>
+                `;
+                });
+
+                // 渲染未分类订阅源
+                if (uncategorized.length > 0) {
+                    const displayFeeds = unreadOnly
+                        ? uncategorized.filter((f) => f.unread_count > 0)
+                        : uncategorized;
+                    if (!unreadOnly || displayFeeds.length > 0) {
+                        const uncategorizedUnread = uncategorized.reduce(
+                            (sum, f) => sum + (f.unread_count || 0),
+                            0,
+                        );
+                        const isExpanded =
+                            state.expandedCategories?.[0] !== false;
+
+                        html += `
+                        <div class="category-group">
+                            <div class="sidebar-item rounded-lg px-2 py-1.5 cursor-pointer flex items-center gap-1"
+                                 onclick="toggleCategory(0)">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 transition-transform ${isExpanded ? "rotate-180" : ""}"
+                                     fill="none" viewBox="0 0 24 24" stroke="currentColor" id="cat-arrow-0">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                                </svg>
+                                <span class="font-medium text-sm truncate flex-1">未分类</span>
+                                ${uncategorizedUnread ? `<span class="text-xs text-base-content/60">${uncategorizedUnread}</span>` : ""}
+                            </div>
+                            <div id="cat-feeds-0" class="${isExpanded ? "" : "hidden"} pl-2 space-y-0.5">
+                                ${displayFeeds
+                                    .map(
+                                        (feed) => `
+                                    <div class="sidebar-item rounded-lg px-3 py-1.5 cursor-pointer flex items-center justify-between"
+                                         data-type="feed" data-id="${feed.id}"
+                                         onclick="selectNav('feed', ${feed.id})"
+                                         oncontextmenu="showFeedMenu(event, ${feed.id}, '${feed.title}')">
+                                        <div class="flex items-center gap-2 flex-1 overflow-hidden">
+                                            ${
+                                                feed.icon
+                                                    ? `<img src="${feed.icon}" class="w-4 h-4 rounded shrink-0" referrerPolicy="no-referrer" />`
+                                                    : `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                                            </svg>`
+                                            }
+                                            <span class="truncate text-sm">${feed.title}</span>
+                                        </div>
+                                        ${feed.unread_count ? `<span class="text-xs text-base-content/60 shrink-0 ml-2">${feed.unread_count}</span>` : ""}
+                                    </div>
+                                `,
+                                    )
+                                    .join("")}
+                            </div>
+                        </div>
+                    `;
+                    }
+                }
+
+                container.innerHTML = html;
+            }
+
+            // 切换分类展开/收起
+            function toggleCategory(catId) {
+                if (!state.expandedCategories) {
+                    state.expandedCategories = {};
+                }
+                const isExpanded = state.expandedCategories[catId] !== false;
+                state.expandedCategories[catId] = !isExpanded;
+
+                const feedsList = document.getElementById(`cat-feeds-${catId}`);
+                const arrow = document.getElementById(`cat-arrow-${catId}`);
+
+                if (isExpanded) {
+                    feedsList.classList.add("hidden");
+                    arrow.classList.remove("rotate-180");
+                } else {
+                    feedsList.classList.remove("hidden");
+                    arrow.classList.add("rotate-180");
+                }
+            }
+
+            // 切换只显示未读
+            function toggleUnreadOnly() {
+                renderFeeds();
+            }
+
+            // 导入订阅源 - 显示导入对话框
+            function importFeeds() {
+                document.getElementById("importModal").showModal();
+            }
+
+            // 重置导入对话框
+            function resetImportModal() {
+                document.getElementById("importResult").classList.add("hidden");
+                document
+                    .getElementById("importStatus")
+                    .classList.remove("hidden");
+                document
+                    .getElementById("importSuccess")
+                    .classList.add("hidden");
+                document.getElementById("importError").classList.add("hidden");
+                document.getElementById("importFileInput").value = "";
+            }
+
+            // 处理拖拽悬停
+            function handleImportDragOver(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                document
+                    .getElementById("importDropZone")
+                    .classList.add("border-primary", "bg-base-200/50");
+            }
+
+            // 处理拖拽离开
+            function handleImportDragLeave(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                document
+                    .getElementById("importDropZone")
+                    .classList.remove("border-primary", "bg-base-200/50");
+            }
+
+            // 处理文件拖放
+            function handleImportDrop(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                document
+                    .getElementById("importDropZone")
+                    .classList.remove("border-primary", "bg-base-200/50");
+
+                const files = event.dataTransfer.files;
+                if (files.length > 0) {
+                    uploadImportFile(files[0]);
+                }
+            }
+
+            // 处理文件选择
+            function handleImportFileSelect(event) {
+                const file = event.target.files[0];
+                if (file) {
+                    uploadImportFile(file);
+                }
+            }
+
+            // 上传导入文件
+            async function uploadImportFile(file) {
+                document
+                    .getElementById("importResult")
+                    .classList.remove("hidden");
+                document
+                    .getElementById("importStatus")
+                    .classList.remove("hidden");
+                document
+                    .getElementById("importSuccess")
+                    .classList.add("hidden");
+                document.getElementById("importError").classList.add("hidden");
+
+                const formData = new FormData();
+                formData.append("file", file);
+
+                try {
+                    const res = await fetch("/api/feed/import", {
+                        method: "POST",
+                        headers: {
+                            token: localStorage.getItem("token"),
+                        },
+                        body: formData,
+                    });
+
+                    const data = await res.json();
+
+                    document
+                        .getElementById("importStatus")
+                        .classList.add("hidden");
+
+                    if (data.code === 0 || data.code === "success") {
+                        document
+                            .getElementById("importSuccess")
+                            .classList.remove("hidden");
+                        document.getElementById("importCount").textContent =
+                            `成功导入 ${data.data.imported} 个订阅源`;
+                        // 刷新订阅源列表
+                        loadFeeds();
+                    } else {
+                        document
+                            .getElementById("importError")
+                            .classList.remove("hidden");
+                        document.getElementById("importErrorMsg").textContent =
+                            data.msg || "导入失败";
+                    }
+                } catch (err) {
+                    document
+                        .getElementById("importStatus")
+                        .classList.add("hidden");
+                    document
+                        .getElementById("importError")
+                        .classList.remove("hidden");
+                    document.getElementById("importErrorMsg").textContent =
+                        "网络错误: " + err.message;
+                }
+            }
+
+            // 导出订阅源
+            async function exportFeeds() {
+                try {
+                    const res = await fetch("/api/feed/export", {
+                        headers: {
+                            token: localStorage.getItem("token"),
+                        },
+                    });
+
+                    if (!res.ok) {
+                        throw new Error("导出失败");
+                    }
+
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = "qireader-subscriptions.opml";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                } catch (err) {
+                    showToast("导出失败: " + err.message, "error");
+                }
+            }
+
+            // 切换折叠区域
+            function toggleSection(section) {
+                const list = document.getElementById(section + "List");
+                const arrow = document.getElementById(section + "Arrow");
+                const isHidden = list.classList.contains("hidden");
+
+                list.classList.toggle("hidden");
+                arrow.style.transform = isHidden ? "rotate(180deg)" : "";
+            }
+
+            // 选择导航项
+            async function selectNav(type, id = null) {
+                // 更新激活状态
+                document
+                    .querySelectorAll(".sidebar-item")
+                    .forEach((el) => el.classList.remove("active"));
+                const selector = id
+                    ? `[data-type="${type}"][data-id="${id}"]`
+                    : `[data-type="${type}"]`;
+                document.querySelector(selector)?.classList.add("active");
+
+                // 更新状态
+                state.currentType = type;
+                state.currentId = id;
+                state.page = 1;
+                state.articles = [];
+                state.keyword = "";
+
+                // 清除搜索框
+                document.getElementById("searchInput").value = "";
+                document
+                    .getElementById("clearSearchBtn")
+                    .classList.add("hidden");
+
+                // 更新标题
+                updateTitle(type, id);
+
+                // 加载文章
+                await loadArticles();
+
+                // 移动端关闭侧边栏
+                toggleMobileSidebar(true);
+            }
+
+            // 更新标题
+            function updateTitle(type, id) {
+                const titleEl = document.getElementById("currentTitle");
+                const countEl = document.getElementById("currentCount");
+
+                let title = "全部";
+                switch (type) {
+                    case "starred":
+                        title = "稍后阅读";
+                        break;
+                    case "tag":
+                        const tag = state.tags.find((t) => t.id == id);
+                        title = tag?.name || "标签";
+                        break;
+                    case "category":
+                        const cat = state.categories.find((c) => c.id == id);
+                        title = cat?.label || "分类";
+                        break;
+                    case "feed":
+                        const feed = state.feeds.find((f) => f.id == id);
+                        title = feed?.title || "订阅源";
+                        break;
+                }
+                titleEl.textContent = title;
+            }
+
+            // 加载文章
+            async function loadArticles() {
+                if (state.isLoading) return;
+                state.isLoading = true;
+
+                let url = "";
+                const params = new URLSearchParams({
+                    page: state.page,
+                    page_size: state.pageSize,
+                });
+
+                // 添加搜索关键词
+                if (state.keyword) {
+                    params.append("keyword", state.keyword);
+                }
+
+                switch (state.currentType) {
+                    case "all":
+                        url = "/api/articles/all";
+                        break;
+                    case "starred":
+                        url = "/api/articles/stars";
+                        break;
+                    case "tag":
+                        url = "/api/articles/by-tag?tag_id=" + state.currentId;
+                        break;
+                    case "category":
+                        url =
+                            "/api/articles/by-category?category_id=" +
+                            state.currentId;
+                        break;
+                    case "feed":
+                        url =
+                            "/api/articles/by-feed?feed_id=" + state.currentId;
+                        break;
+                    case "feeds":
+                        toggleSection("categories");
+                        state.isLoading = false;
+                        return;
+                }
+
+                try {
+                    const res = await ajax(
+                        url + (url.includes("?") ? "&" : "?") + params,
+                    );
+                    if (res.code === 0 || res.code === "success") {
+                        state.articles =
+                            state.page === 1
+                                ? res.data.list
+                                : [...state.articles, ...res.data.list];
+                        state.total = res.data.total;
+                        renderArticles();
+                        updateCount();
+
+                        // 控制加载更多提示
+                        document
+                            .getElementById("loadMore")
+                            .classList.toggle(
+                                "hidden",
+                                state.articles.length >= state.total,
+                            );
+                        document
+                            .getElementById("emptyState")
+                            .classList.toggle(
+                                "hidden",
+                                state.articles.length > 0,
+                            );
+                    }
+                } finally {
+                    state.isLoading = false;
+                }
+            }
+
+            // 滚动加载
+            function onArticleListScroll() {
+                const container = document.getElementById("articleList");
+                const scrollTop = container.scrollTop;
+                const scrollHeight = container.scrollHeight;
+                const clientHeight = container.clientHeight;
+
+                // 距离底部 100px 时触发加载
+                if (scrollHeight - scrollTop - clientHeight < 100) {
+                    if (
+                        !state.isLoading &&
+                        state.articles.length < state.total
+                    ) {
+                        state.page++;
+                        loadArticles();
+                    }
+                }
+            }
+
+            // 搜索文章
+            function searchArticles() {
+                const input = document.getElementById("searchInput");
+                const keyword = input.value.trim();
+                state.keyword = keyword;
+                state.page = 1;
+                state.articles = [];
+
+                // 显示/隐藏清除按钮
+                document
+                    .getElementById("clearSearchBtn")
+                    .classList.toggle("hidden", !keyword);
+
+                loadArticles();
+            }
+
+            // 清除搜索
+            function clearSearch() {
+                document.getElementById("searchInput").value = "";
+                document
+                    .getElementById("clearSearchBtn")
+                    .classList.add("hidden");
+                state.keyword = "";
+                state.page = 1;
+                state.articles = [];
+                loadArticles();
+            }
+
+            // 高亮关键字
+            function highlightKeyword(text, keyword) {
+                if (!keyword || !text) return text;
+                const regex = new RegExp(
+                    `(${keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+                    "gi",
+                );
+                return text.replace(
+                    regex,
+                    '<mark class="bg-yellow-200 text-inherit rounded px-0.5">$1</mark>',
+                );
+            }
+
+            // 渲染文章列表
+            function renderArticles() {
+                const container = document.querySelector("#articleList > div");
+                container.innerHTML = state.articles
+                    .map(
+                        (article, index) => `
+                <div class="article-card p-4 cursor-pointer ${index === state.currentIndex ? "active" : ""}"
+                     data-index="${index}" data-id="${article.id}"
+                     onclick="selectArticle(${index})"
+                     oncontextmenu="showArticleMenu(event, ${index})">
+                    <div class="flex items-start gap-3">
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center gap-2 text-sm text-base-content/60 mb-1">
+                                ${!article.read ? '<span class="w-2 h-2 bg-primary rounded-full"></span>' : ""}
+                                <span class="truncate">${article.feed_name || "未知来源"}</span>
+                                <span>${formatTime(article.published_at)}</span>
+                            </div>
+                            <h3 class="font-medium ${article.read ? "text-base-content/60" : ""} line-clamp-2 mb-1">${highlightKeyword(article.title, state.keyword)}</h3>
+                            <p class="text-sm text-base-content/50 line-clamp-2">${highlightKeyword(article.excerpt, state.keyword)}</p>
+                        </div>
+                        ${article.thumbnail ? `<img src="${article.thumbnail}" class="w-20 h-14 object-cover rounded shrink-0" referrerPolicy="no-referrer" />` : ""}
+                    </div>
+                </div>
+            `,
+                    )
+                    .join("");
+            }
+
+            // 更新计数
+            function updateCount() {
+                document.getElementById("currentCount").textContent =
+                    state.total;
+            }
+
+            // 格式化时间
+            function formatTime(dateStr) {
+                if (!dateStr) return "";
+                const date = new Date(dateStr);
+                const now = new Date();
+                const diff = (now - date) / 1000;
+
+                if (diff < 3600) return Math.floor(diff / 60) + "分钟前";
+                if (diff < 86400) return Math.floor(diff / 3600) + "小时前";
+                if (diff < 604800) return Math.floor(diff / 86400) + "天前";
+                return date.toLocaleDateString();
+            }
+
+            // 选择文章
+            function selectArticle(index) {
+                state.currentIndex = index;
+                const article = state.articles[index];
+
+                // 更新卡片状态
+                document.querySelectorAll(".article-card").forEach((el, i) => {
+                    el.classList.toggle("active", i === index);
+                });
+
+                // 标记已读
+                if (!article.read) {
+                    markRead(article.id);
+                    article.read = 1;
+
+                    // 更新对应订阅源的未读数量
+                    const feed = state.feeds.find(f => f.id === article.feed_id);
+                    if (feed && feed.unread_count > 0) {
+                        feed.unread_count--;
+                        renderFeeds(); // 重新渲染订阅源列表
+                        updateAllUnread(); // 更新总未读数
+                    }
+
+                    renderArticles(); // 重新渲染列表以更新未读标记
+                }
+
+                // 渲染详情
+                renderArticleDetail(article);
+
+                // 更新导航按钮
+                document.getElementById("prevBtn").disabled = index <= 0;
+                document.getElementById("nextBtn").disabled =
+                    index >= state.articles.length - 1;
+
+                // 更新收藏按钮状态
+                updateStarBtn(article.favorite);
+
+                // 更新已读按钮状态
+                updateReadBtn(article.read);
+            }
+
+            // 渲染文章详情
+            function renderArticleDetail(article) {
+                const container = document.getElementById("articleDetail");
+                container.innerHTML = `
+                <article class="" style="max-width: 50rem;">
+                    <!-- 文章头部 -->
+                    <header class="mb-8 pb-4 border-b border-base-200">
+                        <!-- 来源信息 -->
+                        <div class="flex items-center gap-2 text-sm text-base-content/60 mb-3">
+                            ${article.feed?.icon ? `<img src="${article.feed.icon}" class="w-5 h-5 rounded" referrerPolicy="no-referrer" />` : ""}
+                            <span class="font-medium">${article.feed_name || "未知来源"}</span>
+                        </div>
+                        <!-- 标题 -->
+                        <h1 class="text-2xl font-bold text-base-content mb-3 leading-tight">
+                            <a href="${article.link}" target="_blank" rel="noopener noreferrer" class="hover:text-primary hover:underline cursor-pointer">
+                                ${article.title}
+                            </a>
+                        </h1>
+                        <!-- 元信息 -->
+                        <div class="flex items-center gap-4 text-sm text-base-content/50">
+                            ${
+                                article.author
+                                    ? `<span class="flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                </svg>
+                                ${article.author}
+                            </span>`
+                                    : ""
+                            }
+                            <span class="flex items-center gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                                ${formatTime(article.published_at)}
+                            </span>
+                        </div>
+                    </header>
+                    <!-- 文章内容 -->
+                    <div class="article-content text-base-content/90">
+                        ${article.content || article.excerpt || "暂无内容"}
+                    </div>
+                </article>
+            `;
+            }
+
+            // 标记已读
+            async function markRead(articleId) {
+                await ajax("/api/articles/read", {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: articleId }),
+                });
+            }
+
+            // 上一篇/下一篇
+            function prevArticle() {
+                if (state.currentIndex > 0) {
+                    selectArticle(state.currentIndex - 1);
+                }
+            }
+
+            function nextArticle() {
+                if (state.currentIndex < state.articles.length - 1) {
+                    selectArticle(state.currentIndex + 1);
+                }
+            }
+
+            // 切换收藏状态
+            async function toggleStar() {
+                if (state.currentIndex < 0) return;
+                const article = state.articles[state.currentIndex];
+
+                const url = article.favorite
+                    ? "/api/articles/unstar"
+                    : "/api/articles/star";
+                const res = await ajax(url, {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: article.id }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    article.favorite = article.favorite ? 0 : 1;
+                    updateStarBtn(article.favorite);
+                }
+            }
+
+            // 更新收藏按钮状态
+            function updateStarBtn(favorite) {
+                const starBtn = document.getElementById("starBtn");
+                starBtn.innerHTML = favorite
+                    ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>'
+                    : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>';
+            }
+
+            // 切换已读状态
+            async function toggleRead() {
+                if (state.currentIndex < 0) return;
+                const article = state.articles[state.currentIndex];
+
+                const url = article.read
+                    ? "/api/articles/unread"
+                    : "/api/articles/read";
+                const res = await ajax(url, {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: article.id }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    const wasRead = article.read;
+                    article.read = wasRead ? 0 : 1;
+                    updateReadBtn(article.read);
+
+                    // 更新对应订阅源的未读数量
+                    const feed = state.feeds.find(f => f.id === article.feed_id);
+                    if (feed) {
+                        if (wasRead) {
+                            // 标记为未读，增加计数
+                            feed.unread_count++;
+                        } else {
+                            // 标记为已读，减少计数
+                            feed.unread_count = Math.max(0, feed.unread_count - 1);
+                        }
+                        renderFeeds();
+                        updateAllUnread();
+                    }
+
+                    renderArticles();
+                }
+            }
+
+            // 更新已读按钮状态
+            function updateReadBtn(read) {
+                const readBtn = document.getElementById("readBtn");
+                readBtn.innerHTML = read
+                    ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" /></svg>'
+                    : '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" /></svg>';
+            }
+
+            // 打开原文
+            function openOriginal() {
+                if (state.currentIndex < 0) return;
+                const article = state.articles[state.currentIndex];
+                if (article.link) {
+                    window.open(article.link, "_blank");
+                }
+            }
+
+            // 标记所有已读
+            async function markAllRead() {
+                // 如果没有选中文章，使用列表中最后一篇（最旧的）
+                let article;
+                if (state.currentIndex >= 0) {
+                    article = state.articles[state.currentIndex];
+                } else if (state.articles.length > 0) {
+                    article = state.articles[state.articles.length - 1];
+                } else {
+                    return;
+                }
+
+                const res = await ajax("/api/articles/read-above", {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: article.id }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    // 更新所有文章状态
+                    state.articles.forEach((a) => (a.read = 1));
+                    renderArticles();
+
+                    // 更新所有订阅源的未读数量为0
+                    state.feeds.forEach(f => f.unread_count = 0);
+                    renderFeeds();
+                    updateAllUnread();
+
+                    // 更新已读按钮状态
+                    if (state.currentIndex >= 0) {
+                        updateReadBtn(1);
+                    }
+                }
+            }
+
+            // 刷新订阅
+            async function refreshFeed() {
+                console.log('refreshFeed 开始调用');
+                try {
+                    const feedId = state.currentType === "feed" ? state.currentId : null;
+                    console.log('feedId:', feedId);
+                    
+                    showToast("正在提交刷新任务...", "info");
+                    console.log('已显示提交中提示');
+                    
+                    const res = await ajax("/api/feed/refresh", {
+                        method: "POST",
+                        body: JSON.stringify({ feed_id: feedId }),
+                    });
+                    console.log('API 响应:', res);
+
+                    if (res.code === 0 || res.code === "success") {
+                        console.log('调用 showToast 显示成功');
+                        showToast("刷新任务已加入队列", "success");
+                    } else {
+                        showToast(res.msg || "刷新失败", "error");
+                    }
+                } catch (err) {
+                    console.error("刷新失败:", err);
+                    showToast("刷新失败: " + err.message, "error");
+                }
+            }
+
+            // 显示文章右键菜单
+            function showArticleMenu(event, index) {
+                event.preventDefault();
+                const article = state.articles[index];
+
+                const menu = document.getElementById("contextMenu");
+                menu.innerHTML = `
+                <div class="context-menu-item" onclick="openArticleOriginal(${index})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                    在新页面打开原文
+                </div>
+                <div class="context-menu-item" onclick="markArticleRead(${index})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    ${article.read ? "标记为未读" : "标记为已读"}
+                </div>
+                <div class="context-menu-item" onclick="toggleArticleStar(${index})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    ${article.favorite ? "取消稍后阅读" : "稍后阅读"}
+                </div>
+                <div class="context-menu-item" onclick="showTagModal(${index})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                    </svg>
+                    标签
+                </div>
+                <div class="context-menu-item" onclick="markAboveRead(${index})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    标记以上为已读
+                </div>
+            `;
+
+                showContextMenu(event.clientX, event.clientY);
+            }
+
+            // 显示分类右键菜单
+            function showCategoryMenu(event, id, name) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const menu = document.getElementById("contextMenu");
+                menu.innerHTML = `
+                <div class="context-menu-item" onclick="pinCategory(${id})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    置顶
+                </div>
+                <div class="context-menu-item" onclick="renameCategory(${id}, '${name}')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    重命名…
+                </div>
+                <div class="context-menu-item danger" onclick="deleteCategory(${id})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    删除
+                </div>
+            `;
+
+                showContextMenu(event.clientX, event.clientY);
+            }
+
+            // 显示标签右键菜单
+            function showTagMenu(event, id, name) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const menu = document.getElementById("contextMenu");
+                menu.innerHTML = `
+                <div class="context-menu-item" onclick="renameTag(${id}, '${name}')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    重命名…
+                </div>
+                <div class="context-menu-item danger" onclick="deleteTag(${id})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    删除
+                </div>
+            `;
+
+                showContextMenu(event.clientX, event.clientY);
+            }
+
+            // 显示订阅源区域更多菜单
+            function showFeedsMenu(event) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const unreadOnly =
+                    document.getElementById("unreadOnlyCheckbox")?.checked ||
+                    false;
+
+                const menu = document.getElementById("contextMenu");
+                menu.innerHTML = `
+                <div class="context-menu-item" onclick="importFeeds(); hideContextMenu();">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    导入...
+                </div>
+                <div class="context-menu-item" onclick="exportFeeds(); hideContextMenu();">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    导出...
+                </div>
+                <div class="border-t border-base-200 my-1"></div>
+                <div class="context-menu-item" onclick="toggleUnreadOnlyMenu(); hideContextMenu();">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ${unreadOnly ? "text-primary" : "text-transparent"}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    只显示未读
+                </div>
+            `;
+
+                showContextMenu(event.clientX, event.clientY);
+            }
+
+            // 从菜单切换只显示未读
+            function toggleUnreadOnlyMenu() {
+                const checkbox = document.getElementById("unreadOnlyCheckbox");
+                if (checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    toggleUnreadOnly();
+                }
+            }
+
+            // 显示订阅源右键菜单
+            function showFeedMenu(event, id, name) {
+                event.preventDefault();
+                event.stopPropagation();
+
+                const menu = document.getElementById("contextMenu");
+                menu.innerHTML = `
+                <div class="context-menu-item" onclick="showMoveFeedModal(${id})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    移动到
+                </div>
+                <div class="context-menu-item" onclick="showFeedOptions(${id})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    订阅源选项…
+                </div>
+                <div class="context-menu-item danger" onclick="deleteFeed(${id})">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    退订
+                </div>
+            `;
+
+                showContextMenu(event.clientX, event.clientY);
+            }
+
+            // 显示右键菜单
+            function showContextMenu(x, y) {
+                const menu = document.getElementById("contextMenu");
+                menu.classList.remove("hidden");
+
+                // 确保菜单不超出屏幕
+                const rect = menu.getBoundingClientRect();
+                if (x + rect.width > window.innerWidth)
+                    x = window.innerWidth - rect.width - 10;
+                if (y + rect.height > window.innerHeight)
+                    y = window.innerHeight - rect.height - 10;
+
+                menu.style.left = x + "px";
+                menu.style.top = y + "px";
+            }
+
+            // 隐藏右键菜单
+            function hideContextMenu() {
+                document.getElementById("contextMenu").classList.add("hidden");
+            }
+
+            // 点击其他地方隐藏右键菜单
+            document.addEventListener("click", () => {
+                hideContextMenu();
+            });
+
+            // 文章菜单操作
+            function openArticleOriginal(index) {
+                const article = state.articles[index];
+                if (article.link) window.open(article.link, "_blank");
+            }
+
+            async function markArticleRead(index) {
+                const article = state.articles[index];
+                const url = article.read
+                    ? "/api/articles/unread"
+                    : "/api/articles/read";
+                const res = await ajax(url, {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: article.id }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    const wasRead = article.read;
+                    article.read = wasRead ? 0 : 1;
+
+                    // 更新对应订阅源的未读数量
+                    const feed = state.feeds.find(f => f.id === article.feed_id);
+                    if (feed) {
+                        if (wasRead) {
+                            // 标记为未读，增加计数
+                            feed.unread_count++;
+                        } else {
+                            // 标记为已读，减少计数
+                            feed.unread_count = Math.max(0, feed.unread_count - 1);
+                        }
+                        renderFeeds();
+                        updateAllUnread();
+                    }
+
+                    renderArticles();
+                    // 如果是当前选中的文章，更新已读按钮
+                    if (index === state.currentIndex) {
+                        updateReadBtn(article.read);
+                    }
+                }
+            }
+
+            async function toggleArticleStar(index) {
+                const article = state.articles[index];
+                const url = article.favorite
+                    ? "/api/articles/unstar"
+                    : "/api/articles/star";
+                const res = await ajax(url, {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: article.id }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    article.favorite = article.favorite ? 0 : 1;
+                    renderArticles();
+
+                    // 如果操作的是当前选中的文章，更新右侧详情区的收藏按钮
+                    if (state.currentIndex === index) {
+                        updateStarBtn(article.favorite);
+                    }
+                }
+            }
+
+            async function showTagModal(index) {
+                const article = state.articles[index];
+                window.currentArticleId = article.id;
+                window.currentArticleIndex = index;
+
+                // 获取文章当前标签
+                let articleTagIds = [];
+                try {
+                    const articleDetail = await ajax(`/api/articles/info?id=${article.id}`);
+                    console.log('文章详情:', articleDetail);
+                    if (articleDetail.code === 0 || articleDetail.code === 'success') {
+                        articleTagIds = articleDetail.data.article?.tags?.map(t => parseInt(t.id)) || [];
+                        console.log('文章标签IDs:', articleTagIds);
+                    }
+                } catch (e) {
+                    console.error('获取文章标签失败:', e);
+                }
+
+                // 渲染标签列表
+                const container = document.getElementById("articleTagList");
+                console.log('全局标签:', state.tags);
+                container.innerHTML = state.tags
+                    .map(
+                        (tag) => {
+                            const tagId = parseInt(tag.id);
+                            const isChecked = articleTagIds.includes(tagId);
+                            console.log(`标签 ${tag.name} (ID:${tagId}):`, isChecked ? '选中' : '未选中');
+                            return `
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="checkbox checkbox-sm"
+                           data-tag-id="${tag.id}" ${isChecked ? 'checked' : ''}
+                           onchange="toggleArticleTag(${tag.id}, this.checked)" />
+                    <span>${tag.name}</span>
+                </label>
+            `;
+                        }
+                    )
+                    .join("");
+
+                document.getElementById("tagModal").showModal();
+            }
+
+            async function closeTagModal() {
+                // 刷新标签列表以更新文章数量
+                await loadTags();
+                // 关闭弹窗
+                document.getElementById("tagModal").close();
+            }
+
+            async function toggleArticleTag(tagId, checked) {
+                const articleId = window.currentArticleId;
+                const url = checked
+                    ? "/api/articles/add-tag"
+                    : "/api/articles/remove-tag";
+
+                await ajax(url, {
+                    method: "POST",
+                    body: JSON.stringify({
+                        article_id: articleId,
+                        tag_id: tagId,
+                    }),
+                });
+            }
+
+            async function markAboveRead(index) {
+                const article = state.articles[index];
+                const res = await ajax("/api/articles/read-above", {
+                    method: "POST",
+                    body: JSON.stringify({ article_id: article.id }),
+                });
+                if (res.code === 0 || res.code === "success") {
+                    // 统计每个订阅源被标记为已读的文章数量
+                    const feedUnreadCount = {};
+                    state.articles.forEach((a, i) => {
+                        if (i <= index && !a.read) {
+                            a.read = 1;
+                            feedUnreadCount[a.feed_id] = (feedUnreadCount[a.feed_id] || 0) + 1;
+                        }
+                    });
+
+                    // 更新订阅源的未读数量
+                    Object.keys(feedUnreadCount).forEach(feedId => {
+                        const feed = state.feeds.find(f => f.id == feedId);
+                        if (feed) {
+                            feed.unread_count = Math.max(0, feed.unread_count - feedUnreadCount[feedId]);
+                        }
+                    });
+                    renderFeeds();
+                    updateAllUnread();
+
+                    renderArticles();
+                    // 如果是当前选中的文章，更新已读按钮状态
+                    if (index === state.currentIndex) {
+                        updateReadBtn(1);
+                    }
+                }
+            }
+
+            // 分类操作
+            async function pinCategory(id) {
+                await ajax("/api/categories/pin", {
+                    method: "POST",
+                    body: JSON.stringify({ category_id: id, is_pinned: 1 }),
+                });
+                await loadCategories();
+            }
+
+            function renameCategory(id, name) {
+                window.renameTarget = { type: "category", id };
+                document.getElementById("renameInput").value = name;
+                document.getElementById("renameModal").showModal();
+            }
+
+            async function deleteCategory(id) {
+                const confirmed = await showConfirmDialog("确定删除该分类？分类下的订阅源将被移至未分类。");
+                if (!confirmed) return;
+                await ajax("/api/categories/del", {
+                    method: "POST",
+                    body: JSON.stringify({ category_id: id }),
+                });
+                await loadCategories();
+            }
+
+            // 标签操作
+            function renameTag(id, name) {
+                window.renameTarget = { type: "tag", id };
+                document.getElementById("renameInput").value = name;
+                document.getElementById("renameModal").showModal();
+            }
+
+            async function deleteTag(id) {
+                const confirmed = await showConfirmDialog("确定删除该标签？");
+                if (!confirmed) return;
+                await ajax("/api/tag/del", {
+                    method: "POST",
+                    body: JSON.stringify({ tag_id: id }),
+                });
+                await loadTags();
+            }
+
+            // 订阅源操作
+            async function refreshSingleFeed(id) {
+                try {
+                    showToast("正在提交刷新任务...", "info");
+                    const res = await ajax("/api/feed/refresh", {
+                        method: "POST",
+                        body: JSON.stringify({ feed_id: id }),
+                    });
+                    
+                    if (res.code === 0 || res.code === "success") {
+                        showToast("刷新任务已加入队列", "success");
+                    } else {
+                        showToast(res.msg || "刷新失败", "error");
+                    }
+                } catch (err) {
+                    console.error("刷新失败:", err);
+                    showToast("刷新失败: " + err.message, "error");
+                }
+            }
+
+            // 显示移动订阅源弹窗
+            function showMoveFeedModal(feedId) {
+                hideContextMenu();
+                window.moveTargetFeedId = feedId;
+                renderMoveFeedCategoryList();
+                document.getElementById("moveFeedModal").showModal();
+            }
+
+            // 关闭移动订阅源弹窗
+            function closeMoveFeedModal() {
+                document.getElementById("moveFeedModal").close();
+                window.moveTargetFeedId = null;
+            }
+
+            // 渲染移动弹窗中的分类列表
+            function renderMoveFeedCategoryList() {
+                const container = document.getElementById("moveFeedCategoryList");
+                const currentFeed = state.feeds.find(f => f.id === window.moveTargetFeedId);
+                const currentCategoryId = currentFeed?.category_id || 0;
+
+                let html = `
+                    <div class="sidebar-item rounded-lg px-3 py-2 cursor-pointer flex items-center gap-2 ${currentCategoryId === 0 ? 'bg-primary/10 text-primary' : ''}"
+                         onclick="moveFeedToCategory(${window.moveTargetFeedId}, 0)">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                        </svg>
+                        <span class="flex-1">未分类</span>
+                        ${currentCategoryId === 0 ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' : ''}
+                    </div>
+                `;
+
+                state.categories.forEach(cat => {
+                    const isCurrent = cat.id === currentCategoryId;
+                    html += `
+                        <div class="sidebar-item rounded-lg px-3 py-2 cursor-pointer flex items-center gap-2 ${isCurrent ? 'bg-primary/10 text-primary' : ''}"
+                             onclick="moveFeedToCategory(${window.moveTargetFeedId}, ${cat.id})">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                            </svg>
+                            <span class="flex-1 truncate">${cat.label}</span>
+                            ${isCurrent ? '<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>' : ''}
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            }
+
+            // 移动订阅源到指定分类
+            async function moveFeedToCategory(feedId, categoryId) {
+                try {
+                    await ajax("/api/feed/edit", {
+                        method: "POST",
+                        body: JSON.stringify({
+                            feed_id: feedId,
+                            category_id: categoryId,
+                        }),
+                    });
+                    showToast("移动成功");
+                    await loadFeeds();
+                    closeMoveFeedModal();
+                } catch (err) {
+                    console.error("移动失败:", err);
+                    showToast("移动失败: " + err.message, "error");
+                }
+            }
+
+            // 在移动弹窗中创建新分类
+            async function createCategoryInMove() {
+                const name = document.getElementById("newCategoryInMove").value.trim();
+                if (!name) return;
+
+                try {
+                    const res = await ajax("/api/categories/add", {
+                        method: "POST",
+                        body: JSON.stringify({ name }),
+                    });
+
+                    if (res.code === 0 || res.code === "success") {
+                        document.getElementById("newCategoryInMove").value = "";
+                        await loadCategories();
+                        renderMoveFeedCategoryList();
+                        showToast("文件夹创建成功");
+                    } else {
+                        showToast(res.msg || "创建失败", "error");
+                    }
+                } catch (err) {
+                    console.error("创建分类失败:", err);
+                    showToast("创建失败: " + err.message, "error");
+                }
+            }
+
+            // 订阅源选项（暂未实现详细功能）
+            function showFeedOptions(id) {
+                hideContextMenu();
+                showToast("订阅源选项功能开发中");
+            }
+
+            async function deleteFeed(id) {
+                const confirmed = await showConfirmDialog("确定退订该订阅源？所有相关文章将被删除。");
+                if (!confirmed) return;
+                await ajax("/api/feed/del", {
+                    method: "POST",
+                    body: JSON.stringify({ feed_id: id }),
+                });
+                await loadFeeds();
+            }
+
+            // 确认重命名
+            async function confirmRename() {
+                const name = document
+                    .getElementById("renameInput")
+                    .value.trim();
+                if (!name) return;
+
+                const { type, id } = window.renameTarget;
+                let url = "";
+
+                if (type === "category") {
+                    url = "/api/categories/edit";
+                    await ajax(url, {
+                        method: "POST",
+                        body: JSON.stringify({ category_id: id, name }),
+                    });
+                    await loadCategories();
+                } else if (type === "tag") {
+                    url = "/api/tag/edit";
+                    await ajax(url, {
+                        method: "POST",
+                        body: JSON.stringify({ tag_id: id, name }),
+                    });
+                    await loadTags();
+                }
+
+                document.getElementById("renameModal").close();
+            }
+
+            // 添加订阅
+            function showAddFeed() {
+                document.getElementById("feedUrl").value = "";
+                document
+                    .getElementById("discoverResult")
+                    .classList.add("hidden");
+                document.getElementById("addFeedModal").showModal();
+            }
+
+            async function discoverFeed() {
+                const url = document.getElementById("feedUrl").value.trim();
+                if (!url) return;
+
+                const res = await ajax("/api/feed/discover", {
+                    method: "POST",
+                    body: JSON.stringify({ url }),
+                });
+
+                if (
+                    (res.code === 0 || res.code === "success") &&
+                    res.data.feeds.length > 0
+                ) {
+                    const list = document.getElementById("discoverList");
+                    list.innerHTML = res.data.feeds
+                        .map(
+                            (feed) => `
+                    <div class="flex items-center justify-between p-2 bg-base-200 rounded-lg">
+                        <div>
+                            <div class="font-medium">${feed.title}</div>
+                            <div class="text-sm text-base-content/60">${feed.url}</div>
+                        </div>
+                        <button class="btn btn-sm btn-primary" onclick="addFeed('${feed.url}')">订阅</button>
+                    </div>
+                `,
+                        )
+                        .join("");
+                    document
+                        .getElementById("discoverResult")
+                        .classList.remove("hidden");
+                } else {
+                    showToast("未发现订阅源", "warning");
+                }
+            }
+
+            async function addFeed(url) {
+                const res = await ajax("/api/feed/add", {
+                    method: "POST",
+                    body: JSON.stringify({ url }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    document.getElementById("addFeedModal").close();
+                    await loadFeeds();
+                    showToast("订阅成功");
+                } else {
+                    showToast(res.msg || "订阅失败", "error");
+                }
+            }
+
+            // 创建标签
+            async function createTag() {
+                const name = document.getElementById("newTagName").value.trim();
+                if (!name) return;
+
+                await ajax("/api/tag/add", {
+                    method: "POST",
+                    body: JSON.stringify({ name }),
+                });
+
+                document.getElementById("newTagName").value = "";
+                await loadTags();
+            }
+
+            // 创建标签并添加到当前文章
+            async function createTagAndAssign() {
+                const name = document.getElementById("newTagName").value.trim();
+                if (!name) return;
+
+                const res = await ajax("/api/tag/add", {
+                    method: "POST",
+                    body: JSON.stringify({ name }),
+                });
+
+                if (res.code === 0 || res.code === "success") {
+                    document.getElementById("newTagName").value = "";
+                    
+                    // 先刷新全局标签列表
+                    await loadTags();
+
+                    // 自动添加到当前文章
+                    if (window.currentArticleId && res.data.tag) {
+                        try {
+                            await ajax("/api/articles/add-tag", {
+                                method: "POST",
+                                body: JSON.stringify({
+                                    article_id: window.currentArticleId,
+                                    tag_id: res.data.tag.id,
+                                }),
+                            });
+                            showToast("标签创建并添加成功");
+                        } catch (e) {
+                            showToast("标签已创建，但添加到文章失败", "warning");
+                        }
+
+                        // 更新模态框中的标签列表（延迟一点确保状态更新）
+                        setTimeout(() => {
+                            showTagModal(window.currentArticleIndex);
+                        }, 100);
+                    }
+                } else {
+                    showToast(res.msg || "创建标签失败", "error");
+                }
+            }
+
+            // 添加分类
+            function addCategory() {
+                document.getElementById("categoryName").value = "";
+                document.getElementById("addCategoryModal").showModal();
+            }
+
+            async function doAddCategory() {
+                const name = document
+                    .getElementById("categoryName")
+                    .value.trim();
+                if (!name) return;
+
+                await ajax("/api/categories/add", {
+                    method: "POST",
+                    body: JSON.stringify({ name }),
+                });
+
+                document.getElementById("addCategoryModal").close();
+                await loadCategories();
+            }
+
+            // 移动端侧边栏
+            function toggleMobileSidebar(forceClose = false) {
+                const sidebar = document.getElementById("mobileSidebar");
+                if (forceClose || !sidebar.classList.contains("hidden")) {
+                    sidebar.classList.add("hidden");
+                } else {
+                    sidebar.classList.remove("hidden");
+                }
+            }
+
+            // 主题切换
+            function toggleTheme() {
+                const html = document.documentElement;
+                const currentTheme = html.getAttribute('data-theme');
+                const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                
+                html.setAttribute('data-theme', newTheme);
+                localStorage.setItem('theme', newTheme);
+                updateThemeIcon(newTheme);
+            }
+
+            // 更新主题图标
+            function updateThemeIcon(theme) {
+                const lightIcon = document.getElementById('themeIconLight');
+                const darkIcon = document.getElementById('themeIconDark');
+                
+                if (theme === 'dark') {
+                    lightIcon.classList.add('hidden');
+                    darkIcon.classList.remove('hidden');
+                } else {
+                    lightIcon.classList.remove('hidden');
+                    darkIcon.classList.add('hidden');
+                }
+            }
+
+            // 初始化主题
+            function initTheme() {
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                document.documentElement.setAttribute('data-theme', savedTheme);
+                updateThemeIcon(savedTheme);
+            }
+
+            // 页面加载时初始化主题
+            initTheme();
+
+            // 设置
+            async function showSettings() {
+                const confirmed = await showConfirmDialog("确定退出登录？");
+                if (confirmed) {
+                    localStorage.removeItem("token");
+                    window.location.href = "/auth/login";
+                }
+            }
+
+            // 全局键盘快捷键
+            document.addEventListener('keydown', function(event) {
+                // 忽略在输入框中的按键
+                if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA') {
+                    return;
+                }
+
+                switch(event.key) {
+                    case 'ArrowUp':
+                        event.preventDefault();
+                        if (state.currentIndex > 0) {
+                            selectArticle(state.currentIndex - 1);
+                        }
+                        break;
+                    case 'ArrowDown':
+                        event.preventDefault();
+                        if (state.currentIndex < state.articles.length - 1) {
+                            selectArticle(state.currentIndex + 1);
+                        }
+                        break;
+                    case 'm':
+                    case 'M':
+                        event.preventDefault();
+                        if (state.currentIndex >= 0) {
+                            toggleRead();
+                        }
+                        break;
+                    case 's':
+                    case 'S':
+                        event.preventDefault();
+                        if (state.currentIndex >= 0) {
+                            toggleStar();
+                        }
+                        break;
+                    case 'f':
+                    case 'F':
+                        event.preventDefault();
+                        document.getElementById('searchInput').focus();
+                        break;
+                    case '?':
+                        event.preventDefault();
+                        showShortcutsHelp();
+                        break;
+                }
+            });
+
+            // 显示快捷键帮助
+            function showShortcutsHelp() {
+                const helpHtml = `
+                    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onclick="this.remove()">
+                        <div class="bg-base-100 p-6 rounded-lg shadow-xl max-w-md w-full" onclick="event.stopPropagation()">
+                            <h3 class="font-bold text-lg mb-4">键盘快捷键</h3>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex justify-between">
+                                    <span>↑ / ↓</span>
+                                    <span class="text-base-content/60">上一篇 / 下一篇文章</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>M</span>
+                                    <span class="text-base-content/60">标记已读 / 未读</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>S</span>
+                                    <span class="text-base-content/60">收藏 / 取消收藏</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>F</span>
+                                    <span class="text-base-content/60">聚焦搜索框</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span>?</span>
+                                    <span class="text-base-content/60">显示快捷键帮助</span>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-center">
+                                <button class="btn btn-primary btn-sm" onclick="this.closest('.fixed').remove()">关闭</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', helpHtml);
+            }
+
+            // 分享文章
+            async function shareArticle() {
+                if (state.currentIndex < 0) {
+                    showToast('请先选择一篇文章', 'warning');
+                    return;
+                }
+                
+                const article = state.articles[state.currentIndex];
+                const shareData = {
+                    title: article.title,
+                    text: article.excerpt?.substring(0, 100) + '...',
+                    url: article.url
+                };
+                
+                // 检查是否支持 Web Share API
+                if (navigator.share) {
+                    try {
+                        await navigator.share(shareData);
+                    } catch (err) {
+                        // 用户取消分享
+                        if (err.name !== 'AbortError') {
+                            fallbackShare(article);
+                        }
+                    }
+                } else {
+                    fallbackShare(article);
+                }
+            }
+
+            // 备用分享方式
+            function fallbackShare(article) {
+                const shareHtml = `
+                    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" id="shareDialog" onclick="this.remove()">
+                        <div class="bg-base-100 p-6 rounded-lg shadow-xl max-w-sm w-full" onclick="event.stopPropagation()">
+                            <h3 class="font-bold text-lg mb-4">分享文章</h3>
+                            <p class="text-sm text-base-content/60 mb-4 truncate">${article.title}</p>
+                            <div class="grid grid-cols-4 gap-3">
+                                <button class="btn btn-ghost flex flex-col items-center gap-1 p-3" data-share="copy">
+                                    <span class="text-2xl">🔗</span>
+                                    <span class="text-xs">复制链接</span>
+                                </button>
+                                <button class="btn btn-ghost flex flex-col items-center gap-1 p-3" data-share="twitter">
+                                    <span class="text-2xl">𝕏</span>
+                                    <span class="text-xs">Twitter</span>
+                                </button>
+                                <button class="btn btn-ghost flex flex-col items-center gap-1 p-3" data-share="weibo">
+                                    <span class="text-2xl">📱</span>
+                                    <span class="text-xs">微博</span>
+                                </button>
+                                <button class="btn btn-ghost flex flex-col items-center gap-1 p-3" data-share="email">
+                                    <span class="text-2xl">✉️</span>
+                                    <span class="text-xs">邮件</span>
+                                </button>
+                            </div>
+                            <div class="mt-4 text-center">
+                                <button class="btn btn-ghost btn-sm" onclick="this.closest('.fixed').remove()">取消</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.insertAdjacentHTML('beforeend', shareHtml);
+                
+                // 绑定分享按钮事件
+                const dialog = document.getElementById('shareDialog');
+                dialog.querySelector('[data-share="copy"]').onclick = function() {
+                    copyToClipboard(article.url);
+                    dialog.remove();
+                };
+                dialog.querySelector('[data-share="twitter"]').onclick = function() {
+                    openShareWindow('https://twitter.com/intent/tweet?url=' + encodeURIComponent(article.url) + '&text=' + encodeURIComponent(article.title));
+                    dialog.remove();
+                };
+                dialog.querySelector('[data-share="weibo"]').onclick = function() {
+                    openShareWindow('https://service.weibo.com/share/share.php?url=' + encodeURIComponent(article.url) + '&title=' + encodeURIComponent(article.title));
+                    dialog.remove();
+                };
+                dialog.querySelector('[data-share="email"]').onclick = function() {
+                    window.location.href = 'mailto:?subject=' + encodeURIComponent(article.title) + '&body=' + encodeURIComponent(article.url);
+                    dialog.remove();
+                };
+            }
+
+            // 打开分享窗口
+            function openShareWindow(url) {
+                window.open(url, '_blank', 'width=600,height=400');
+            }
+
+            // 复制到剪贴板
+            async function copyToClipboard(text) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    showToast('链接已复制到剪贴板');
+                } catch (err) {
+                    // 备用方案
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    textarea.style.position = 'fixed';
+                    textarea.style.opacity = '0';
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast('链接已复制到剪贴板');
+                }
+            }
+
+            // 显示提示 - 支持不同类型 (success, error, warning)
+            function showToast(message, type = 'info') {
+                console.log('showToast:', message, type); // 调试日志
+                
+                const toast = document.createElement('div');
+                
+                // 根据类型设置样式
+                let bgClass = 'bg-base-300 text-base-content';
+                let icon = '';
+                
+                switch(type) {
+                    case 'success':
+                        bgClass = 'bg-success text-success-content';
+                        icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+                        break;
+                    case 'error':
+                        bgClass = 'bg-error text-error-content';
+                        icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>';
+                        break;
+                    case 'warning':
+                        bgClass = 'bg-warning text-warning-content';
+                        icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>';
+                        break;
+                    case 'info':
+                    default:
+                        bgClass = 'bg-info text-info-content';
+                        icon = '<svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+                        break;
+                }
+                
+                // 移除已存在的相同类型提示，避免重叠
+                const existingToasts = document.querySelectorAll('.toast-notification');
+                existingToasts.forEach(t => t.remove());
+                
+                // 初始状态：透明且上移（从顶部出现）
+                toast.style.cssText = 'position: fixed; top: 1rem; left: 50%; transform: translate(-50%, -20px); opacity: 0; transition: all 0.3s ease-out; z-index: 9999;';
+                toast.className = `toast-notification ${bgClass} px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-[200px] justify-center`;
+                toast.innerHTML = `${icon}<span>${message}</span>`;
+                
+                document.body.appendChild(toast);
+                
+                // 触发动画：淡入并下移
+                requestAnimationFrame(() => {
+                    toast.style.opacity = '1';
+                    toast.style.transform = 'translate(-50%, 0)';
+                });
+                
+                setTimeout(() => {
+                    // 消失动画：淡出并上移（回到顶部）
+                    toast.style.transition = 'all 0.3s ease-in';
+                    toast.style.opacity = '0';
+                    toast.style.transform = 'translate(-50%, -20px)';
+                    
+                    // 动画结束后移除元素
+                    setTimeout(() => {
+                        if (toast.parentNode) {
+                            toast.remove();
+                        }
+                    }, 300);
+                }, 2000);
+            }
+
+            // 自定义确认对话框（替代原生 confirm）
+            function showConfirmDialog(message, onConfirm, onCancel) {
+                return new Promise((resolve) => {
+                    const dialogHtml = `
+                        <div class="confirm-dialog modal modal-open z-50">
+                            <div class="modal-box max-w-sm">
+                                <h3 class="font-bold text-lg flex items-center gap-2">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-warning" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    确认操作
+                                </h3>
+                                <p class="py-4">${message}</p>
+                                <div class="modal-action">
+                                    <button class="btn btn-ghost cancel-btn">取消</button>
+                                    <button class="btn btn-error confirm-btn">确认</button>
+                                </div>
+                            </div>
+                            <div class="modal-backdrop"></div>
+                        </div>
+                    `;
+                    
+                    document.body.insertAdjacentHTML('beforeend', dialogHtml);
+                    const dialog = document.querySelector('.confirm-dialog');
+                    
+                    const cleanup = () => {
+                        if (dialog) dialog.remove();
+                    };
+                    
+                    dialog.querySelector('.cancel-btn').addEventListener('click', () => {
+                        cleanup();
+                        if (onCancel) onCancel();
+                        resolve(false);
+                    });
+                    
+                    dialog.querySelector('.confirm-btn').addEventListener('click', () => {
+                        cleanup();
+                        if (onConfirm) onConfirm();
+                        resolve(true);
+                    });
+                    
+                    // 点击背景关闭
+                    const backdrop = dialog.querySelector('.modal-backdrop');
+                    if (backdrop) {
+                        backdrop.addEventListener('click', () => {
+                            cleanup();
+                            if (onCancel) onCancel();
+                            resolve(false);
+                        });
+                    }
+                    
+                    // ESC 键关闭
+                    const escHandler = (e) => {
+                        if (e.key === 'Escape') {
+                            document.removeEventListener('keydown', escHandler);
+                            cleanup();
+                            if (onCancel) onCancel();
+                            resolve(false);
+                        }
+                    };
+                    document.addEventListener('keydown', escHandler);
+                });
+            }
+
+            // 翻译文章
+            let isTranslated = false;
+            let originalContentHtml = null;
+            function translateArticle() {
+                if (state.currentIndex < 0) return;
+
+                const article = state.articles[state.currentIndex];
+                if (!article) return;
+
+                // 检查翻译服务是否加载
+                if (typeof translate === 'undefined') {
+                    showToast('翻译服务加载中，请稍后重试');
+                    return;
+                }
+
+                if (isTranslated) {
+                    // 如果已经翻译，恢复原文
+                    if (originalContentHtml) {
+                        const container = document.getElementById('articleDetail');
+                        container.innerHTML = originalContentHtml;
+                    }
+                    isTranslated = false;
+                    originalContentHtml = null;
+                    showToast('已恢复原文');
+                    return;
+                }
+
+                // 显示翻译中提示
+                showToast('正在翻译...');
+
+                try {
+                    // 保存当前 HTML
+                    const container = document.getElementById('articleDetail');
+                    originalContentHtml = container.innerHTML;
+
+                    // 使用 translate.js 进行翻译
+                    // 自动检测语言并翻译
+                    translate.execute();
+
+                    // 添加已翻译标记
+                    setTimeout(() => {
+                        const headerEl = document.querySelector('article header');
+                        if (headerEl && !headerEl.querySelector('.translated-badge')) {
+                            const badge = document.createElement('span');
+                            badge.className = 'translated-badge badge badge-sm badge-primary ml-2';
+                            badge.textContent = '已翻译';
+                            const sourceInfo = headerEl.querySelector('.text-base-content\\/60');
+                            if (sourceInfo) {
+                                sourceInfo.appendChild(badge);
+                            }
+                        }
+
+                        // 添加翻译说明
+                        const articleEl = document.querySelector('article');
+                        if (articleEl && !articleEl.querySelector('.translation-note')) {
+                            const note = document.createElement('div');
+                            note.className = 'translation-note mt-8 p-4 bg-base-200 rounded-lg text-sm text-base-content/60';
+                            note.innerHTML = '<p>本文已使用 translate.js 自动翻译。点击翻译按钮可恢复原文。</p>';
+                            articleEl.appendChild(note);
+                        }
+
+                        isTranslated = true;
+                        showToast('翻译完成');
+                    }, 1500);
+                } catch (err) {
+                    console.error('翻译失败:', err);
+                    showToast('翻译失败: ' + err.message);
+                }
+            }
+            
+            // 翻译文本函数
+            async function translateText(text) {
+                if (!text || typeof translate === 'undefined') {
+                    throw new Error('翻译服务未加载');
+                }
+                
+                // 检测是否为英文内容（简单检测）
+                const isEnglish = /^[\x00-\x7F]*$/.test(text.replace(/\s/g, ''));
+                if (isEnglish) {
+                    // 英文翻译为中文
+                    translate.language.setTarget('chinese_simplified');
+                } else {
+                    // 其他语言翻译为英文
+                    translate.language.setTarget('english');
+                }
+                
+                // 使用 translate.js 的翻译功能
+                return new Promise((resolve, reject) => {
+                    try {
+                        // 直接翻译文本
+                        translate.text(text, function(translatedText) {
+                            if (translatedText && translatedText !== text) {
+                                resolve(translatedText);
+                            } else {
+                                // 如果翻译失败，返回原文
+                                resolve(text);
+                            }
+                        });
+                    } catch (err) {
+                        reject(err);
+                    }
+                });
+            }
+        </script>
+        <!-- translate.js 翻译库 -->
+        <script src="https://res.zvo.cn/translate/translate.js"></script>
+        <script>
+            // 初始化 translate.js
+            document.addEventListener('DOMContentLoaded', function() {
+                if (typeof translate !== 'undefined') {
+                    // 设置使用版本2的翻译引擎
+                    translate.setUseVersion2();
+                    // 设置本地语言（当前页面语言）
+                    translate.language.setLocal('chinese_simplified');
+                }
+            });
+        </script>
+        <script>
+            // Page Visibility API - 页面重新可见时自动刷新
+            document.addEventListener('DOMContentLoaded', function() {
+                let lastVisibleTime = Date.now();
+                const REFRESH_THRESHOLD = 30000; // 30秒阈值
+
+                document.addEventListener('visibilitychange', function() {
+                    // 确保 state 已初始化
+                    if (typeof state === 'undefined') {
+                        return;
+                    }
+                    
+                    if (document.visibilityState === 'visible') {
+                        const now = Date.now();
+                        const hiddenDuration = now - lastVisibleTime;
+                        
+                        // 如果页面隐藏超过30秒，执行刷新
+                        if (hiddenDuration > REFRESH_THRESHOLD) {
+                            console.log('页面重新活跃，执行刷新...');
+                            
+                            // 根据当前视图类型执行刷新
+                            if (state.currentType === 'feed' && state.currentId) {
+                                // 刷新当前订阅源
+                                refreshSingleFeed(state.currentId);
+                            } else if (state.currentType === 'all' || state.currentType === 'starred') {
+                                // 刷新全部
+                                refreshFeed();
+                            }
+                            
+                            // 重新加载文章列表
+                            loadArticles();
+                        }
+                        
+                        lastVisibleTime = now;
+                    } else {
+                        // 页面隐藏时更新时间
+                        lastVisibleTime = Date.now();
+                    }
+                });
+            });
+        </script>
+    </body>
+</html>

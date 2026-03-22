@@ -1,0 +1,101 @@
+<!doctype html>
+<html data-theme="light">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>登录</title>
+        <link href="/static/app.css" rel="stylesheet" />
+    </head>
+    <body class="bg-base-200 min-h-screen flex items-center justify-center">
+        <div class="card bg-base-100 w-full max-w-sm shadow-xl">
+            <div class="card-body">
+                <h2 class="card-title text-2xl font-bold justify-center mb-4">
+                    登录
+                </h2>
+                <form id="loginForm">
+                    <div class="form-control w-full">
+                        <label class="label">
+                            <span class="label-text">用户名</span>
+                        </label>
+                        <input
+                            type="text"
+                            name="name"
+                            placeholder="请输入用户名"
+                            class="input input-bordered w-full"
+                            required
+                        />
+                    </div>
+                    <div class="form-control w-full mt-4">
+                        <label class="label">
+                            <span class="label-text">密码</span>
+                        </label>
+                        <input
+                            type="password"
+                            name="password"
+                            placeholder="请输入密码"
+                            class="input input-bordered w-full"
+                            required
+                        />
+                    </div>
+                    <div
+                        id="errorMsg"
+                        class="text-error text-sm mt-2 hidden"
+                    ></div>
+                    <div class="card-actions justify-center mt-6">
+                        <button type="submit" class="btn btn-primary w-full">
+                            登录
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </body>
+    <script src="/static/app.js"></script>
+    <script>
+        // 显示错误信息
+        function showError(msg) {
+            const errorEl = document.getElementById("errorMsg");
+            errorEl.textContent = msg;
+            errorEl.classList.remove("hidden");
+        }
+
+        // 隐藏错误信息
+        function hideError() {
+            const errorEl = document.getElementById("errorMsg");
+            errorEl.classList.add("hidden");
+        }
+
+        // 表单提交
+        document
+            .getElementById("loginForm")
+            .addEventListener("submit", async function (e) {
+                e.preventDefault();
+                hideError();
+
+                const formData = new FormData(this);
+                const data = {
+                    name: formData.get("name"),
+                    password: formData.get("password"),
+                };
+
+                try {
+                    const res = await fetch("/api/auth/login", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(data),
+                    }).then((r) => r.json());
+
+                    if (res.code === 0) {
+                        setToken(res.data.token);
+                        window.location.href = "/";
+                    } else {
+                        showError(res.msg || "登录失败");
+                    }
+                } catch (err) {
+                    showError("网络错误，请稍后重试");
+                }
+            });
+    </script>
+</html>
