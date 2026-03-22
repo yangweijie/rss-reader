@@ -46,7 +46,8 @@
     }
   },
   "config": {
-    "preferred-install": "dist"
+    "preferred-install": "dist",
+    "block-insecure": false
   },
   "scripts": {
     "post-autoload-dump": [
