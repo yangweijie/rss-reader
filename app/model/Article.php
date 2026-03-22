@@ -30,7 +30,9 @@ class Article extends Model
 
         // 如果没有关联数据，尝试通过 feed_id 查询
         if (!empty($data["feed_id"])) {
-            $feed = Subscription::where("id", $data["feed_id"])->value("title");
+            $feed = Subscription::where("id", $data["feed_id"])
+                ->cache(60)
+                ->value("title");
             return $feed ?: "未知来源";
         }
 
