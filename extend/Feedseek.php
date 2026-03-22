@@ -18,7 +18,7 @@ class Feedseek
     protected static bool $strict = false;
 
     /**
-     * @var array 发现的 feed 列表
+     * @var array 发现的 feed 列表，每项包含 title 和 url
      */
     protected static array $feeds = [];
 
@@ -112,13 +112,36 @@ class Feedseek
 
         if (
             !static::isValidUrl($uri) ||
-            in_array($uri, static::$feeds) ||
+            static::isFeedExists($uri) ||
             (static::$strict && !static::isValidFeed($uri))
         ) {
             return;
         }
 
-        static::$feeds[] = $uri;
+        // 获取 feed 标题，优先使用 title 属性，其次是 type 属性
+        $title =
+            $node->getAttribute("title") ?: $node->getAttribute("type") ?: $uri;
+
+        static::$feeds[] = [
+            "title" => $title,
+            "url" => $uri,
+        ];
+    }
+
+    /**
+     * 检查 feed 是否已存在
+     *
+     * @param string $uri
+     * @return bool
+     */
+    protected static function isFeedExists(string $uri): bool
+    {
+        foreach (static::$feeds as $feed) {
+            if ($feed["url"] === $uri) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
