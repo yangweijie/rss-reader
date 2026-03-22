@@ -11,7 +11,7 @@ class FeedService
 {
     public static function discover(string $url): array
     {
-        return Feedseek::find($url);
+        return \Feedseek::find($url);
     }
 
     public static function addFeed(
@@ -46,18 +46,21 @@ class FeedService
 
         try {
             $feedData = Reader::import($feed->url);
-            
+
             // 统计文章数量
             $articleCount = 0;
             foreach ($feedData as $entry) {
                 $articleCount++;
             }
-            
+
             // 重新导入以便遍历
             $feedData = Reader::import($feed->url);
-            
-            echo "[" . date('Y-m-d H:i:s') . "] local.INFO: 解析到 {$articleCount} 篇文章" . PHP_EOL;
-            
+
+            echo "[" .
+                date("Y-m-d H:i:s") .
+                "] local.INFO: 解析到 {$articleCount} 篇文章" .
+                PHP_EOL;
+
             $feed->title = $feedData->getTitle() ?: $feed->title;
             $feed->description = $feedData->getDescription();
             $feed->last_fetched = date("Y-m-d H:i:s");
@@ -73,7 +76,11 @@ class FeedService
             }
         } catch (Exception $e) {
             $result["errors"][] = $e->getMessage();
-            echo "[" . date('Y-m-d H:i:s') . "] local.ERROR: 刷新失败: " . $e->getMessage() . PHP_EOL;
+            echo "[" .
+                date("Y-m-d H:i:s") .
+                "] local.ERROR: 刷新失败: " .
+                $e->getMessage() .
+                PHP_EOL;
         }
 
         return $result;
@@ -81,10 +88,10 @@ class FeedService
 
     protected static function syncArticle(Feed $feed, $entry): string
     {
-        $link = $entry->getLink() ?: '';
-        $title = $entry->getTitle() ?: '';
-        $content = $entry->getContent() ?: $entry->getDescription() ?: '';
-        $description = $entry->getDescription() ?: $content ?: '';
+        $link = $entry->getLink() ?: "";
+        $title = $entry->getTitle() ?: "";
+        $content = $entry->getContent() ?: $entry->getDescription() ?: "";
+        $description = $entry->getDescription() ?: $content ?: "";
         $excerpt = strip_tags((string) $description);
         $excerpt = mb_substr($excerpt, 0, 200, "UTF-8");
         $author = $entry->getAuthor() ?: null;
@@ -105,7 +112,7 @@ class FeedService
             }
 
             $existing->title = $title ?: "No Title";
-            $existing->content = $content ?: '';
+            $existing->content = $content ?: "";
             $existing->excerpt = $excerpt ?: "Click to read more";
             $existing->author = is_array($author)
                 ? $author["name"] ?? null
@@ -120,7 +127,7 @@ class FeedService
         $article->user_id = $feed->user_id;
         $article->link = $link;
         $article->title = $title ?: "No Title";
-        $article->content = $content ?: '';
+        $article->content = $content ?: "";
         $article->excerpt = $excerpt ?: "Click to read more";
         $article->author = is_array($author)
             ? $author["name"] ?? null
