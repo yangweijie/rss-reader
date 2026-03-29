@@ -11,5 +11,5 @@ Thumbs.db
 /.buildpath
 /.project
 runtime
-database
+/database/database.sqlite
 node_modules
