@@ -97,17 +97,49 @@ class FeedService
         $author = $entry->getAuthor() ?: null;
         $publishedAt = $entry->getDateCreated() ?: new \DateTime();
 
-        $existing = Article::where("feed_id", "=", $feed->id)
-            ->where("link", "=", $link)
-            ->find();
+        // 获取 guid（RSS 的唯一标识符）
+        $guid = $entry->getId() ?: "";
+        
+        // 如果没有 guid，使用 link 的 MD5 hash 作为唯一标识
+        if (empty($guid) && !empty($link)) {
+            $guid = md5($link);
+        }
+        
+        // 如果仍然没有唯一标识，使用 title + publishedAt 的 hash
+        if (empty($guid)) {
+            $guid = md5($title . $publishedAt->format("Y-m-d H:i:s"));
+        }
+
+        // 尝试使用 guid 查找（如果字段存在）
+        $existing = null;
+        try {
+            $existing = Article::where("feed_id", "=", $feed->id)
+                ->where("guid", "=", $guid)
+                ->find();
+        } catch (\Exception $e) {
+            // guid 字段可能不存在，回退到使用 link
+            $existing = null;
+        }
+        
+        // 如果 guid 查找失败，使用 link 作为备用
+        if (!$existing && !empty($link)) {
+            $existing = Article::where("feed_id", "=", $feed->id)
+                ->where("link", "=", $link)
+                ->find();
+        }
 
         if ($existing) {
+            // 文章已存在，检查是否需要更新
+            // 只有当发布时间或标题发生变化时才更新
             $existingPublishedAt = $existing->published_at
                 ? strtotime($existing->published_at)
                 : 0;
             $newPublishedAt = $publishedAt->getTimestamp();
 
-            if ($existingPublishedAt == $newPublishedAt) {
+            if (
+                $existingPublishedAt == $newPublishedAt &&
+                $existing->title === ($title ?: "No Title")
+            ) {
                 return "skipped";
             }
 
@@ -118,6 +150,13 @@ class FeedService
                 ? $author["name"] ?? null
                 : $author;
             $existing->published_at = $publishedAt->format("Y-m-d H:i:s");
+            $existing->link = $link; // 更新 link 以防链接发生变化
+            // 尝试更新 guid 字段（如果存在）
+            try {
+                $existing->guid = $guid;
+            } catch (\Exception $e) {
+                // 忽略 guid 字段不存在的错误
+            }
             $existing->save();
             return "updated";
         }
@@ -135,6 +174,12 @@ class FeedService
         $article->published_at = $publishedAt->format("Y-m-d H:i:s");
         $article->read = 0;
         $article->favorite = 0;
+        // 尝试设置 guid 字段（如果存在）
+        try {
+            $article->guid = $guid;
+        } catch (\Exception $e) {
+            // 忽略 guid 字段不存在的错误
+        }
         $article->save();
         return "created";
     }

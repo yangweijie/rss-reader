@@ -1619,10 +1619,33 @@
                 titleEl.textContent = title;
             }
 
+            // 显示文章列表 loading
+            function showArticlesLoading() {
+                const container = document.querySelector("#articleList > div");
+                container.innerHTML = `
+                    <div class="flex flex-col items-center justify-center py-16">
+                        <span class="loading loading-spinner loading-lg text-primary"></span>
+                        <p class="text-sm text-base-content/60 mt-4">加载中...</p>
+                    </div>
+                `;
+                document.getElementById("emptyState").classList.add("hidden");
+                document.getElementById("loadMore").classList.add("hidden");
+            }
+
+            // 隐藏文章列表 loading
+            function hideArticlesLoading() {
+                // loading 内容会被 renderArticles 覆盖
+            }
+
             // 加载文章
             async function loadArticles() {
                 if (state.isLoading) return;
                 state.isLoading = true;
+
+                // 首页加载时显示 loading
+                if (state.page === 1) {
+                    showArticlesLoading();
+                }
 
                 let url = "";
                 const params = new URLSearchParams({
@@ -1689,6 +1712,7 @@
                     }
                 } finally {
                     state.isLoading = false;
+                    hideArticlesLoading();
                 }
             }
 
@@ -2036,8 +2060,9 @@
                         state.currentType === "feed" ? state.currentId : null;
                     console.log("feedId:", feedId);
 
-                    showToast("正在提交刷新任务...", "info");
-                    console.log("已显示提交中提示");
+                    // 显示刷新中的 loading 状态（duration=0 表示不自动关闭）
+                    showToast('<span class="loading loading-spinner loading-sm mr-2"></span>正在刷新订阅...', "info", 0);
+                    console.log("已显示刷新中提示");
 
                     const res = await ajax("/api/feed/refresh", {
                         method: "POST",
@@ -2047,12 +2072,21 @@
 
                     if (res.code === 0 || res.code === "success") {
                         console.log("调用 showToast 显示成功");
-                        showToast("刷新任务已加入队列", "success");
+                        hideToast(); // 关闭 loading toast
+                        showToast("刷新完成", "success");
+                        // 刷新完成后重新加载文章列表
+                        state.page = 1;
+                        state.articles = [];
+                        await loadArticles();
+                        // 同时刷新订阅源列表以更新未读数
+                        await loadFeeds();
                     } else {
+                        hideToast();
                         showToast(res.msg || "刷新失败", "error");
                     }
                 } catch (err) {
                     console.error("刷新失败:", err);
+                    hideToast();
                     showToast("刷新失败: " + err.message, "error");
                 }
             }
@@ -3044,8 +3078,8 @@
                 }
             }
 
-            // 显示提示 - 支持不同类型 (success, error, warning)
-            function showToast(message, type = "info") {
+            // 显示提示 - 支持不同类型 (success, error, warning)，duration 为毫秒数，0 表示不自动关闭
+            function showToast(message, type = "info", duration = 3000) {
                 console.log("showToast:", message, type); // 调试日志
 
                 const toast = document.createElement("div");
@@ -3098,19 +3132,37 @@
                     toast.style.transform = "translate(-50%, 0)";
                 });
 
-                setTimeout(() => {
-                    // 消失动画：淡出并上移（回到顶部）
+                // duration 为 0 时不自动关闭，需要手动调用 hideToast
+                if (duration !== 0) {
+                    setTimeout(() => {
+                        // 消失动画：淡出并上移（回到顶部）
+                        toast.style.transition = "all 0.3s ease-in";
+                        toast.style.opacity = "0";
+                        toast.style.transform = "translate(-50%, -20px)";
+
+                        // 动画结束后移除元素
+                        setTimeout(() => {
+                            if (toast.parentNode) {
+                                toast.remove();
+                            }
+                        }, 300);
+                    }, duration || 2000);
+                }
+            }
+
+            // 隐藏 toast 提示
+            function hideToast() {
+                const toasts = document.querySelectorAll(".toast-notification");
+                toasts.forEach((toast) => {
                     toast.style.transition = "all 0.3s ease-in";
                     toast.style.opacity = "0";
                     toast.style.transform = "translate(-50%, -20px)";
-
-                    // 动画结束后移除元素
                     setTimeout(() => {
                         if (toast.parentNode) {
                             toast.remove();
                         }
                     }, 300);
-                }, 2000);
+                });
             }
 
             // 自定义确认对话框（替代原生 confirm）
