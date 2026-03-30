@@ -1917,7 +1917,30 @@
                         updateAllUnread(); // 更新总未读数
                     }
 
-                    renderArticles(); // 重新渲染列表以更新未读标记
+                    // 只看未读模式下，从列表中移除已读文章
+                    if (state.unreadOnly) {
+                        state.articles.splice(index, 1);
+                        state.total--;
+                        // 调整当前索引
+                        if (state.currentIndex >= state.articles.length) {
+                            state.currentIndex = state.articles.length - 1;
+                        }
+                        // 更新计数
+                        updateCount();
+                        // 重新渲染列表
+                        renderArticles();
+                        // 如果还有文章，选中第一篇或当前索引的文章
+                        if (state.articles.length > 0) {
+                            const newIndex = Math.min(state.currentIndex, state.articles.length - 1);
+                            state.currentIndex = newIndex;
+                            renderArticleDetail(state.articles[newIndex]);
+                            document.querySelectorAll(".article-card").forEach((el, i) => {
+                                el.classList.toggle("active", i === newIndex);
+                            });
+                        }
+                    } else {
+                        renderArticles(); // 重新渲染列表以更新未读标记
+                    }
                 }
 
                 // 渲染详情
