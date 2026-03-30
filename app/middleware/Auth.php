@@ -17,12 +17,13 @@ class Auth
             return Jump::returnResponse()->error('请先登录', '/auth/login');
         }
         
-        try {
-            $data = Jwt::Check($token);
-            $request->uid = $data["data"]["user_id"];
-        } catch (Exception $e) {
-            return Jump::returnResponse()->error('Token无效，请重新登录');
+        $data = Jwt::Check($token);
+        
+        if ($data['code'] !== 1) {
+            return Jump::returnResponse()->error($data['msg'] ?: 'Token无效，请重新登录');
         }
+        
+        $request->uid = $data["data"]["user_id"];
         
         return $next($request);
     }
