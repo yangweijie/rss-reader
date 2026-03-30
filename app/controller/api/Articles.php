@@ -21,6 +21,7 @@ class Articles
     {
         $dto = new PageDto($request->get());
         $keyword = $request->get("keyword", "");
+        $unread = $request->get("unread", "");
 
         $feedIds = Subscription::where("user_id", $request->uid)->column("id");
 
@@ -51,6 +52,11 @@ class Articles
                     "%{$keyword}%",
                 );
             });
+        }
+
+        // 只看未读
+        if ($unread === "1") {
+            $query->where("articles.read", 0);
         }
 
         $query->order("articles.published_at", "desc");
@@ -184,6 +190,7 @@ class Articles
     {
         $dto = new TagArticleDto($request->get());
         $keyword = $request->get("keyword", "");
+        $unread = $request->get("unread", "");
 
         try {
             $dto->validate("listByTag");
@@ -230,6 +237,11 @@ class Articles
             });
         }
 
+        // 只看未读
+        if ($unread === "1") {
+            $query->where("read", 0);
+        }
+
         $query->order("published_at", "desc");
 
         $total = $query->count();
@@ -252,6 +264,7 @@ class Articles
     {
         $dto = new FeedArticleDto($request->get());
         $keyword = $request->get("keyword", "");
+        $unread = $request->get("unread", "");
 
         try {
             $dto->validate("listByFeed");
@@ -279,6 +292,11 @@ class Articles
                     "%{$keyword}%",
                 );
             });
+        }
+
+        // 只看未读
+        if ($unread === "1") {
+            $query->where("read", 0);
         }
 
         $query->order("published_at", "desc");
@@ -452,6 +470,7 @@ class Articles
     {
         $categoryId = $request->get("category_id");
         $keyword = $request->get("keyword", "");
+        $unread = $request->get("unread", "");
         $page = (int) $request->get("page", 1);
         $pageSize = (int) $request->get("page_size", 20);
 
@@ -488,6 +507,11 @@ class Articles
                     "%{$keyword}%",
                 );
             });
+        }
+
+        // 只看未读
+        if ($unread === "1") {
+            $query->where("read", 0);
         }
 
         $query->order("published_at", "desc");

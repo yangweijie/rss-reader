@@ -1689,6 +1689,11 @@
                     params.append("keyword", state.keyword);
                 }
 
+                // 添加只看未读参数
+                if (state.unreadOnly) {
+                    params.append("unread", "1");
+                }
+
                 switch (state.currentType) {
                     case "all":
                         url = "/api/articles/all";
