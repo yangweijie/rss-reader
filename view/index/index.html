@@ -440,6 +440,28 @@
                             >
                         </div>
                         <div class="flex items-center gap-2">
+                            <!-- 只看未读按钮 -->
+                            <button
+                                id="unreadOnlyBtn"
+                                class="btn btn-ghost btn-sm"
+                                onclick="toggleUnreadOnly()"
+                            >
+                                <svg
+                                    xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4"
+                                    fill="none"
+                                    viewBox="0 0 24 24"
+                                    stroke="currentColor"
+                                >
+                                    <path
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        stroke-width="2"
+                                        d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                                    />
+                                </svg>
+                                只看未读
+                            </button>
                             <button
                                 class="btn btn-ghost btn-sm"
                                 onclick="markAllRead()"
@@ -1157,6 +1179,7 @@
                 feeds: [],
                 isLoading: false, // 防止重复加载
                 keyword: "", // 搜索关键词
+                unreadOnly: false, // 只看未读
             };
 
             // 初始化
@@ -1401,8 +1424,8 @@
                 }
             }
 
-            // 切换只显示未读
-            function toggleUnreadOnly() {
+            // 切换只显示有未读的订阅源（侧边栏）
+            function toggleUnreadFeedsOnly() {
                 renderFeeds();
             }
 
@@ -1576,12 +1599,20 @@
                 state.page = 1;
                 state.articles = [];
                 state.keyword = "";
+                state.unreadOnly = false; // 重置未读筛选状态
 
                 // 清除搜索框
                 document.getElementById("searchInput").value = "";
                 document
                     .getElementById("clearSearchBtn")
                     .classList.add("hidden");
+                
+                // 重置只看未读按钮样式
+                const unreadBtn = document.getElementById("unreadOnlyBtn");
+                if (unreadBtn) {
+                    unreadBtn.classList.remove("btn-primary");
+                    unreadBtn.classList.add("btn-ghost");
+                }
 
                 // 更新标题
                 updateTitle(type, id);
@@ -1716,6 +1747,25 @@
                 }
             }
 
+            // 切换只看未读状态
+            function toggleUnreadOnly() {
+                state.unreadOnly = !state.unreadOnly;
+                state.page = 1;
+                state.articles = [];
+                
+                // 更新按钮样式
+                const btn = document.getElementById("unreadOnlyBtn");
+                if (state.unreadOnly) {
+                    btn.classList.remove("btn-ghost");
+                    btn.classList.add("btn-primary");
+                } else {
+                    btn.classList.remove("btn-primary");
+                    btn.classList.add("btn-ghost");
+                }
+                
+                loadArticles();
+            }
+
             // 滚动加载
             function onArticleListScroll() {
                 const container = document.getElementById("articleList");
@@ -1779,7 +1829,21 @@
             // 渲染文章列表
             function renderArticles() {
                 const container = document.querySelector("#articleList > div");
-                container.innerHTML = state.articles
+                
+                // 如果开启了只看未读，对文章排序：未读排前面
+                let articles = state.articles;
+                if (state.unreadOnly) {
+                    articles = [...state.articles].sort((a, b) => {
+                        // 未读排前面
+                        if (a.read !== b.read) {
+                            return a.read - b.read;
+                        }
+                        // 相同状态按发布时间排序
+                        return new Date(b.published_at) - new Date(a.published_at);
+                    });
+                }
+                
+                container.innerHTML = articles
                     .map(
                         (article, index) => `
                 <div class="article-card p-4 cursor-pointer ${index === state.currentIndex ? "active" : ""}"
