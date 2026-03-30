@@ -443,8 +443,9 @@
                             <!-- 只看未读按钮 -->
                             <button
                                 id="unreadOnlyBtn"
-                                class="btn btn-ghost btn-sm"
+                                class="btn btn-ghost btn-sm btn-circle"
                                 onclick="toggleUnreadOnly()"
+                                title="只看未读"
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -460,11 +461,11 @@
                                         d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
                                     />
                                 </svg>
-                                只看未读
                             </button>
                             <button
-                                class="btn btn-ghost btn-sm"
+                                class="btn btn-ghost btn-sm btn-circle"
                                 onclick="markAllRead()"
+                                title="标记已读"
                             >
                                 <svg
                                     xmlns="http://www.w3.org/2000/svg"
@@ -480,7 +481,6 @@
                                         d="M5 13l4 4L19 7"
                                     />
                                 </svg>
-                                标记已读
                             </button>
                             <button
                                 class="btn btn-ghost btn-sm btn-circle"
@@ -1933,11 +1933,17 @@
                         if (state.articles.length > 0) {
                             const newIndex = Math.min(state.currentIndex, state.articles.length - 1);
                             state.currentIndex = newIndex;
-                            renderArticleDetail(state.articles[newIndex]);
+                            const newArticle = state.articles[newIndex];
+                            renderArticleDetail(newArticle);
+                            updateStarBtn(newArticle.favorite);
+                            updateReadBtn(newArticle.read);
+                            document.getElementById("prevBtn").disabled = newIndex <= 0;
+                            document.getElementById("nextBtn").disabled = newIndex >= state.articles.length - 1;
                             document.querySelectorAll(".article-card").forEach((el, i) => {
                                 el.classList.toggle("active", i === newIndex);
                             });
                         }
+                        return; // 直接返回，不再执行后续渲染
                     } else {
                         renderArticles(); // 重新渲染列表以更新未读标记
                     }
