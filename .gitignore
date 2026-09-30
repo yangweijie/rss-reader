@@ -13,3 +13,4 @@ Thumbs.db
 runtime
 /database/database.sqlite
 node_modules
+public/static/app/

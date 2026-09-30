@@ -40,9 +40,11 @@
 - **RSS 解析**: laminas/laminas-feed
 
 ### 前端
-- **样式**: Tailwind CSS + DaisyUI
-- **构建**: Bun
-- **图标**: SVG 图标
+- **框架**: React 19 + TypeScript(SPA,位于 `frontend/`)
+- **构建**: Vite 7 + Bun
+- **样式**: Tailwind CSS v4(CSS-first 配置,主题变量在 `frontend/src/index.css`)
+- **组件**: shadcn/ui 风格(`frontend/src/components/ui/`)+ Lucide 图标
+- **路由**: react-router v7(`/` 阅读器,`/auth/login` 登录页)
 
 ### 主要依赖库
 
@@ -98,13 +100,17 @@ composer install
 
 3. 安装前端依赖
 ```bash
+cd frontend
 bun install
 ```
 
 4. 编译前端资源
 ```bash
+# 在 frontend/ 目录下执行
 bun run build
-# 或开发模式
+# 产物输出到 public/static/app/,壳视图同步到 view/index/index.html
+
+# 开发模式(vite :3000,/api 代理到 php think run 的 :8000)
 bun run dev
 ```
 
@@ -211,18 +217,23 @@ php think run
 ├── app/
 │   ├── controller/      # 控制器
 │   │   ├── api/         # API 控制器
-│   │   └── Index.php    # 页面控制器
+│   │   └── Index.php    # 页面控制器(渲染 SPA 壳视图)
 │   ├── model/           # 数据模型
 │   ├── service/         # 业务逻辑
 │   ├── middleware/      # 中间件
 │   └── domain/          # DTO 类
 ├── config/              # 配置文件
 ├── database/            # 数据库文件
-├── public/              # 入口文件
-│   └── static/          # 静态资源
+├── frontend/            # React SPA 源码(Vite + React + Tailwind)
+│   └── src/
+│       ├── components/  # reader 组件 + shadcn ui
+│       ├── lib/         # api 客户端等
+│       └── pages/       # Login / Reader
+├── public/
+│   └── static/app/      # 前端构建产物(git 提交与否按需)
 ├── route/               # 路由定义
-├── view/                # 视图模板
-│   └── index/           # 前端页面
+├── view/
+│   └── index/           # SPA 壳视图(构建脚本自动生成)
 └── extend/              # 扩展类
 ```
 

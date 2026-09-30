@@ -1,0 +1,229 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --background: #fefefe;
+  --foreground: #191919;
+  --card: #ffffff;
+  --card-foreground: #191919;
+  --popover: #ffffff;
+  --popover-foreground: #191919;
+  --primary: #861dd4;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f1f3;
+  --secondary-foreground: #191919;
+  /* 侧边栏背景 */
+  --muted: #eeeeee;
+  --muted-foreground: #595959;
+  /* 行 hover */
+  --accent: #e4e4e7;
+  --accent-foreground: #191919;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #ececec;
+  --input: #dcdcdc;
+  --ring: #861dd4;
+  --radius: 0.625rem;
+  /* 计数/时间等弱化文字 */
+  --soft: #919191;
+  /* 菜单/列表行弱 hover */
+  --hover: #f2f2f2;
+  /* 搜索关键字高亮底色 */
+  --mark: #e1d4ef;
+  /* QiReader logo 橙 */
+  --logo: #f79b00;
+}
+
+.dark {
+  --background: #17171a;
+  --foreground: #ececf0;
+  --card: #1e1e23;
+  --card-foreground: #ececf0;
+  --popover: #232329;
+  --popover-foreground: #ececf0;
+  --primary: #a363ea;
+  --primary-foreground: #ffffff;
+  --secondary: #26262c;
+  --secondary-foreground: #ececf0;
+  --muted: #1f1f24;
+  --muted-foreground: #a0a0aa;
+  --accent: #2b2b32;
+  --accent-foreground: #ececf0;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #2c2c33;
+  --input: #34343c;
+  --ring: #a363ea;
+  --soft: #70707a;
+  --hover: #26262c;
+  --mark: #4a2a6b;
+  --logo: #f79b00;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-soft: var(--soft);
+  --color-hover: var(--hover);
+  --color-mark: var(--mark);
+  --color-qi-logo: var(--logo);
+  --radius-xs: calc(var(--radius) - 6px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC",
+    "Microsoft YaHei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-display: "Fira Sans", system-ui, -apple-system, "Segoe UI", Roboto,
+    "PingFang SC", "Microsoft YaHei", sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji";
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* ---------- 文章正文(后端返回的原始 HTML)排版 ---------- */
+.article-content {
+  line-height: 1.75;
+  overflow-wrap: break-word;
+}
+.article-content p {
+  margin: 1em 0;
+}
+.article-content h1,
+.article-content h2,
+.article-content h3,
+.article-content h4,
+.article-content h5,
+.article-content h6 {
+  font-weight: 700;
+  margin: 1.4em 0 0.5em;
+  line-height: 1.4;
+}
+.article-content img,
+.article-content video,
+.article-content iframe {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.article-content a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.article-content blockquote {
+  margin: 1em 0;
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  color: var(--muted-foreground);
+}
+.article-content pre {
+  margin: 1em 0;
+  padding: 0.9em 1em;
+  border-radius: 8px;
+  background: var(--muted);
+  overflow-x: auto;
+  font-size: 0.875em;
+  line-height: 1.6;
+}
+.article-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9em;
+}
+.article-content :not(pre) > code {
+  background: var(--muted);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+}
+.article-content ul,
+.article-content ol {
+  margin: 1em 0;
+  padding-left: 1.6em;
+}
+.article-content ul {
+  list-style: disc;
+}
+.article-content ol {
+  list-style: decimal;
+}
+.article-content table {
+  margin: 1em 0;
+  border-collapse: collapse;
+  width: 100%;
+}
+.article-content th,
+.article-content td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.article-content hr {
+  margin: 1.5em 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+.article-content figure {
+  margin: 1em 0;
+}
+.article-content figcaption {
+  margin-top: 0.4em;
+  font-size: 0.85em;
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+/* ---------- 右键菜单视图切换动画(沿用参考设计) ---------- */
+@keyframes qi-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes qi-slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+.qi-slide-right {
+  animation: qi-slide-in-right 0.18s ease-out;
+}
+.qi-slide-left {
+  animation: qi-slide-in-left 0.18s ease-out;
+}
