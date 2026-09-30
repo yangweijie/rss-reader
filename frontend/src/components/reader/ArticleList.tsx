@@ -84,7 +84,7 @@ export default function ArticleList(props: ArticleListProps) {
       : viewEmptyText(title)
 
   return (
-    <section className="flex min-h-0 w-full shrink-0 flex-col border-border md:w-[400px] md:border-r">
+    <section className="flex h-full min-h-0 w-full shrink-0 flex-col border-border md:w-[400px] md:border-r">
       {/* 标题栏 */}
       <div className="flex h-14 shrink-0 items-center gap-1 border-b border-border px-3">
         <button
