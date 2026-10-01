@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import {
   Bookmark,
   CheckCheck,
@@ -16,6 +16,8 @@ import type { Article } from '@/types'
 
 export interface ArticleListProps {
   title: string
+  /** 视图标识:变化时重置滚动位置 */
+  viewKey: string
   count: number
   articles: Article[]
   total: number
@@ -44,6 +46,7 @@ export interface ArticleListProps {
 export default function ArticleList(props: ArticleListProps) {
   const {
     title,
+    viewKey,
     count,
     articles,
     total,
@@ -69,6 +72,11 @@ export default function ArticleList(props: ArticleListProps) {
   } = props
 
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 切换视图/筛选/搜索后回到顶部
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+  }, [viewKey])
 
   const handleScroll = () => {
     const el = scrollRef.current

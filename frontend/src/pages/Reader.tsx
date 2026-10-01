@@ -115,6 +115,8 @@ export default function Reader() {
 
   const loadingRef = useRef(false)
   const pageRef = useRef(1)
+  // 请求代数:每次加载使之前的在途响应作废,防止切频道后旧响应追加进来
+  const fetchEpochRef = useRef(0)
   const lastHiddenRef = useRef(0)
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -167,7 +169,9 @@ export default function Reader() {
             : ({ category: v.id } as const)
 
   const fetchPage = async (p: number, append: boolean) => {
-    if (loadingRef.current) return
+    // 触底加载防重复;重载(切频道/搜索)必须能压过在途的追加请求
+    if (append && loadingRef.current) return
+    const epoch = ++fetchEpochRef.current
     loadingRef.current = true
     setListLoading(!append)
     try {
@@ -177,14 +181,20 @@ export default function Reader() {
         keyword: keyword.trim() || undefined,
         unread: unreadOnly || undefined,
       })
+      // 期间已发起更新的请求,丢弃本次结果
+      if (epoch !== fetchEpochRef.current) return
       pageRef.current = p
       setTotal(data.total)
       setArticles((prev) => (append ? [...prev, ...data.list] : data.list))
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : '加载文章失败')
+      if (epoch === fetchEpochRef.current) {
+        toast.error(e instanceof Error ? e.message : '加载文章失败')
+      }
     } finally {
-      loadingRef.current = false
-      setListLoading(false)
+      if (epoch === fetchEpochRef.current) {
+        loadingRef.current = false
+        setListLoading(false)
+      }
     }
   }
 
@@ -944,6 +954,7 @@ export default function Reader() {
       <div className={cn('min-w-0 flex-1 md:flex-none', isMobile && selected && 'hidden')}>
         <ArticleList
           title={viewTitle}
+          viewKey={`${view.kind}:${'id' in view ? view.id : ''}:${keyword}:${unreadOnly ? 1 : 0}`}
           count={total}
           articles={articles}
           total={total}
