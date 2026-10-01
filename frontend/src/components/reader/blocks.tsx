@@ -22,6 +22,8 @@ export function Highlight({ text, query }: { text: string; query: string }) {
 export function Checkbox({ checked }: { checked: boolean }) {
   return (
     <span
+      role="checkbox"
+      aria-checked={checked}
       className={cn(
         'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
         checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',
@@ -49,6 +51,7 @@ export function MenuItem({
 }) {
   return (
     <button
+      role="menuitem"
       onClick={onClick}
       className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-foreground hover:bg-hover"
     >
@@ -70,6 +73,7 @@ export function MenuPanel({
 }) {
   return (
     <div
+      role="menu"
       onClick={(e) => {
         e.stopPropagation()
         onClick?.(e)
@@ -101,6 +105,7 @@ export function CtxRow({
 }) {
   return (
     <button
+      role="menuitem"
       onClick={onClick}
       className={cn(
         'flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm hover:bg-hover',

@@ -71,6 +71,10 @@ export interface RenameTarget {
   name: string
 }
 
+/**
+ * 输入框初值取自 target;外层用 key=<type:id> 强制重挂载,
+ * 每次打开都是全新初始化,无需渲染期同步状态。
+ */
 export function RenameDialog({
   target,
   onSubmit,
@@ -80,17 +84,8 @@ export function RenameDialog({
   onSubmit: (target: RenameTarget, name: string) => void
   onClose: () => void
 }) {
-  const [name, setName] = useState('')
-  const open = !!target
-  const current = open ? target : null
-
-  // 每次打开时用目标名称初始化输入框
-  const [lastId, setLastId] = useState<number | null>(null)
-  if (current && current.id !== lastId) {
-    setLastId(current.id)
-    setName(current.name)
-  }
-  if (!current && lastId !== null) setLastId(null)
+  const [name, setName] = useState(target?.name ?? '')
+  const current = target
 
   const submit = () => {
     const v = name.trim()
@@ -100,7 +95,7 @@ export function RenameDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={!!current} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>{current?.type === 'category' ? '重命名分类' : '重命名标签'}</DialogTitle>

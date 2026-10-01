@@ -48,6 +48,7 @@ import {
   getCategories,
   getFeeds,
   getTags,
+  logout as logoutApi,
   markRead,
   markUnread,
   moveFeed,
@@ -84,11 +85,12 @@ export default function Reader() {
   const [articles, setArticles] = useState<Article[]>([])
   const [total, setTotal] = useState(0)
   const [keyword, setKeyword] = useState('')
+  /** 搜索框即时值,防抖后同步到 keyword 触发查询 */
+  const [keywordInput, setKeywordInput] = useState('')
   const [unreadOnly, setUnreadOnly] = useState(false)
   const [feedsUnreadOnly, setFeedsUnreadOnly] = useState(false)
   const [selected, setSelected] = useState<Article | null>(null)
   const [listLoading, setListLoading] = useState(true)
-  const [initialLoading, setInitialLoading] = useState(true)
   const [expandedCats, setExpandedCats] = useState<Record<number, boolean>>({})
   const [tagsOpen, setTagsOpen] = useState(true)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -119,9 +121,16 @@ export default function Reader() {
   const fetchEpochRef = useRef(0)
   const lastHiddenRef = useRef(0)
   const searchRef = useRef<HTMLInputElement | null>(null)
+  const searchTimerRef = useRef<number | null>(null)
 
   const hasOpenDialog =
-    addFeedOpen || importOpen || !!renameTarget || shortcutsOpen || !!shareArticle || !!confirmState
+    addFeedOpen ||
+    importOpen ||
+    !!renameTarget ||
+    shortcutsOpen ||
+    !!shareArticle ||
+    !!confirmState ||
+    mobileSidebarOpen
 
   /* ---------- 派生数据 ---------- */
 
@@ -231,18 +240,38 @@ export default function Reader() {
   useEffect(() => {
     void (async () => {
       await Promise.all([loadCategories(), loadTags(), loadFeeds()])
-      setInitialLoading(false)
     })()
   }, [])
 
   /* ---------- 视图与文章操作 ---------- */
 
   const switchView = (v: View) => {
+    // 取消未生效的搜索防抖,避免旧关键词落到新频道上
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = null
+    }
     setView(v)
     setKeyword('')
+    setKeywordInput('')
     setUnreadOnly(false)
     setSelected(null)
     setMobileSidebarOpen(false)
+  }
+
+  /** 搜索防抖:停顿 300ms 才真正查询;清空立即生效 */
+  const onKeywordChange = (kw: string) => {
+    setKeywordInput(kw)
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    if (kw.trim() === '') {
+      searchTimerRef.current = null
+      setKeyword('')
+      return
+    }
+    searchTimerRef.current = window.setTimeout(() => {
+      searchTimerRef.current = null
+      setKeyword(kw.trim())
+    }, 300)
   }
 
   const selectArticle = (article: Article) => {
@@ -317,20 +346,16 @@ export default function Reader() {
   const markAboveRead = (article: Article) => {
     const index = articles.findIndex((a) => a.id === article.id)
     if (index < 0) return
+    // 同步计算本次将标记为已读的各订阅源未读减量
+    const counts = new Map<number, number>()
+    articles.forEach((a, i) => {
+      if (i <= index && !a.read) counts.set(a.feed_id, (counts.get(a.feed_id) ?? 0) + 1)
+    })
     void readAbove(article.id)
       .then(() => {
-        const counts = new Map<number, number>()
-        setArticles((prev) =>
-          prev.map((a, i) => {
-            if (i > index || a.read) return a
-            counts.set(a.feed_id, (counts.get(a.feed_id) ?? 0) + 1)
-            return { ...a, read: 1 }
-          }),
-        )
-        setTimeout(() => {
-          counts.forEach((n, feedId) => adjustFeedUnread(feedId, -n))
-        }, 0)
-        setSelected((prev) => (prev ? { ...prev, read: 1 } : prev))
+        setArticles((prev) => prev.map((a, i) => (i <= index ? { ...a, read: 1 } : a)))
+        setSelected((prev) => (prev && prev.id === article.id ? { ...prev, read: 1 } : prev))
+        counts.forEach((n, feedId) => adjustFeedUnread(feedId, -n))
         toast.success('已标记以上为已读')
       })
       .catch((e) => toast.error(e instanceof Error ? e.message : '操作失败'))
@@ -523,6 +548,8 @@ export default function Reader() {
     setConfirmState({
       message: '确定退出登录?',
       onConfirm: () => {
+        // JWT 注销失败不阻塞本地退出
+        void logoutApi().catch(() => {})
         clearToken()
         navigate('/auth/login', { replace: true })
       },
@@ -570,6 +597,9 @@ export default function Reader() {
 
   /* ---------- 键盘快捷键 ---------- */
 
+  // handler 存 ref:监听只挂一次,每次渲染后刷新引用以取最新闭包
+  const keyHandlerRef = useRef<(e: KeyboardEvent) => void>(() => {})
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -611,9 +641,14 @@ export default function Reader() {
           break
       }
     }
+    keyHandlerRef.current = onKey
+  })
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => keyHandlerRef.current(e)
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  })
+  }, [])
 
   /* ---------- 页面可见时自动刷新(30 秒阈值) ---------- */
 
@@ -658,9 +693,15 @@ export default function Reader() {
 
   const renderCtxMenu = () => {
     if (!ctxMenu) return null
+    // 文章菜单的勾选状态从 articles 里现查,避免用开菜单时的过期快照
+    const ctxArticle =
+      ctxMenu.kind === 'article'
+        ? (articles.find((a) => a.id === ctxMenu.article.id) ?? ctxMenu.article)
+        : null
     return (
       <div
         data-ctx-menu
+        role="menu"
         className="fixed z-[100] w-[240px] overflow-hidden rounded-xl border border-border bg-popover py-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.15)]"
         style={{
           left: Math.min(ctxMenu.x, window.innerWidth - 260),
@@ -668,7 +709,7 @@ export default function Reader() {
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {ctxMenu.kind === 'article' &&
+        {ctxMenu.kind === 'article' && ctxArticle &&
           (ctxView === 'main' ? (
             <div key="main" className="qi-slide-left">
               <CtxRow
@@ -676,23 +717,23 @@ export default function Reader() {
                 icon={ArrowUpRight}
                 onClick={() => {
                   setCtxMenu(null)
-                  if (ctxMenu.article.link) window.open(ctxMenu.article.link, '_blank', 'noopener')
+                  if (ctxArticle.link) window.open(ctxArticle.link, '_blank', 'noopener')
                 }}
               />
               <CtxRow
-                label={ctxMenu.article.read ? '标记为未读' : '标记为已读'}
+                label={ctxArticle.read ? '标记为未读' : '标记为已读'}
                 icon={Circle}
                 onClick={() => {
-                  toggleRead(ctxMenu.article)
+                  toggleRead(ctxArticle)
                   setCtxMenu(null)
                 }}
               />
               <CtxRow
-                label={ctxMenu.article.favorite ? '取消稍后阅读' : '稍后阅读'}
+                label={ctxArticle.favorite ? '取消稍后阅读' : '稍后阅读'}
                 icon={Bookmark}
-                checkbox={!!ctxMenu.article.favorite}
+                checkbox={!!ctxArticle.favorite}
                 onClick={() => {
-                  toggleStar(ctxMenu.article)
+                  toggleStar(ctxArticle)
                   setCtxMenu(null)
                 }}
               />
@@ -702,7 +743,7 @@ export default function Reader() {
                 label="标记以上为已读"
                 icon={CheckCheck}
                 onClick={() => {
-                  markAboveRead(ctxMenu.article)
+                  markAboveRead(ctxArticle)
                   setCtxMenu(null)
                 }}
               />
@@ -714,13 +755,15 @@ export default function Reader() {
                 {tags.map((tag) => (
                   <button
                     key={tag.id}
+                    role="menuitemcheckbox"
+                    aria-checked={(ctxArticle.tags ?? []).some((t) => t.id === tag.id)}
                     onClick={() => {
-                      toggleArticleTag(ctxMenu.article, tag)
+                      toggleArticleTag(ctxArticle, tag)
                       setCtxMenu(null)
                     }}
                     className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-foreground hover:bg-hover"
                   >
-                    <Checkbox checked={(ctxMenu.article.tags ?? selected?.tags ?? []).some((t) => t.id === tag.id)} />
+                    <Checkbox checked={(ctxArticle.tags ?? []).some((t) => t.id === tag.id)} />
                     <span className="flex-1 truncate">{tag.name}</span>
                   </button>
                 ))}
@@ -883,14 +926,6 @@ export default function Reader() {
 
   /* ---------- 渲染 ---------- */
 
-  if (initialLoading && isMobile === undefined) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <RefreshCw size={24} className="animate-spin text-primary" />
-      </div>
-    )
-  }
-
   const detailHasPrev = selected ? articles.findIndex((a) => a.id === selected.id) > 0 : false
   const detailHasNext = selected
     ? articles.findIndex((a) => a.id === selected.id) < articles.length - 1
@@ -960,19 +995,31 @@ export default function Reader() {
           total={total}
           selectedId={selected?.id ?? null}
           loading={listLoading}
-          keyword={keyword}
+          keyword={keywordInput}
           unreadOnly={unreadOnly}
           sidebarCollapsed={sidebarCollapsed}
           isMobile={isMobile}
-          query={keyword.trim()}
-          onKeywordChange={setKeyword}
+          query={keyword}
+          onKeywordChange={onKeywordChange}
           onToggleUnreadOnly={() => setUnreadOnly((v) => !v)}
           onMarkAllRead={markAllRead}
           onRefresh={refresh}
           onSelect={selectArticle}
           onToggleStar={toggleStar}
           onToggleRead={toggleRead}
-          onArticleCtx={(article, e) => openCtx({ kind: 'article', article, x: e.clientX, y: e.clientY })}
+          onArticleCtx={(article, e) => {
+            openCtx({ kind: 'article', article, x: e.clientX, y: e.clientY })
+            // 预取文章现有标签,保证菜单里的勾选状态准确
+            void getArticleInfo(article.id)
+              .then((data) => {
+                if (data?.article) {
+                  const tags = data.article.tags
+                  setArticles((prev) => prev.map((a) => (a.id === article.id ? { ...a, tags } : a)))
+                  setSelected((prev) => (prev && prev.id === article.id ? { ...prev, tags } : prev))
+                }
+              })
+              .catch(() => {})
+          }}
           onLoadMore={loadMore}
           onOpenSidebar={() => setMobileSidebarOpen(true)}
           onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
@@ -1078,6 +1125,7 @@ export default function Reader() {
         onClose={() => setImportOpen(false)}
       />
       <RenameDialog
+        key={renameTarget ? `${renameTarget.type}:${renameTarget.id}` : 'none'}
         target={renameTarget}
         onSubmit={(target, name) => {
           if (target.type === 'category') {

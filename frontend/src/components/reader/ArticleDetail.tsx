@@ -1,5 +1,6 @@
 /* eslint-disable react-hooks/set-state-in-effect -- 切换文章时重置翻译/弹层状态 */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import DOMPurify from 'dompurify'
 import {
   ArrowUpRight,
   Bookmark,
@@ -97,17 +98,32 @@ export default function ArticleDetail(props: ArticleDetailProps) {
     }
   }
 
-  // 正文里的链接统一新标签页打开
+  // 正文里的链接统一新标签页打开(只放行 http/https)
   const onContentClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
     const anchor = target.closest('a')
-    if (anchor?.href) {
-      e.preventDefault()
-      window.open(anchor.href, '_blank', 'noopener')
+    if (!anchor?.href) return
+    try {
+      const url = new URL(anchor.href, window.location.href)
+      if (url.protocol === 'http:' || url.protocol === 'https:') {
+        e.preventDefault()
+        window.open(url.href, '_blank', 'noopener')
+      }
+    } catch {
+      /* 非法 URL 交给浏览器默认行为 */
     }
   }
 
   const articleTagIds = new Set((props.articleTags ?? article.tags ?? []).map((t) => t.id))
+
+  // RSS 正文是外部不可信 HTML,渲染前净化(保留 referrerpolicy 以维持图片防盗链)
+  const safeHtml = useMemo(
+    () =>
+      DOMPurify.sanitize(article.content || article.excerpt || '<p>暂无内容</p>', {
+        ADD_ATTR: ['referrerpolicy'],
+      }),
+    [article.content, article.excerpt],
+  )
 
   return (
     <section className="relative flex h-full min-w-0 flex-1 flex-col bg-background">
@@ -207,7 +223,7 @@ export default function ArticleDetail(props: ArticleDetailProps) {
             ref={contentRef}
             className="article-content mt-8 text-[17px] text-foreground/90"
             onClick={onContentClick}
-            dangerouslySetInnerHTML={{ __html: article.content || article.excerpt || '<p>暂无内容</p>' }}
+            dangerouslySetInnerHTML={{ __html: safeHtml }}
           />
           {translated && (
             <div className="mt-8 rounded-lg bg-muted p-4 text-sm text-muted-foreground">
@@ -276,6 +292,8 @@ function TagPanel({
         {allTags.map((tag) => (
           <button
             key={tag.id}
+            role="menuitemcheckbox"
+            aria-checked={articleTagIds.has(tag.id)}
             onClick={() => onToggle(tag)}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-foreground hover:bg-hover"
           >
@@ -325,6 +343,8 @@ function TagPanel({
 function MiniCheckbox({ checked }: { checked: boolean }) {
   return (
     <span
+      role="checkbox"
+      aria-checked={checked}
       className={cn(
         'flex h-4 w-4 shrink-0 items-center justify-center rounded border',
         checked ? 'border-primary bg-primary text-primary-foreground' : 'border-input bg-card',

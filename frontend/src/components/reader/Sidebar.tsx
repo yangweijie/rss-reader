@@ -231,7 +231,15 @@ export default function Sidebar(props: SidebarProps) {
             {tags.map((tag) => (
               <div
                 key={tag.id}
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelectView({ kind: 'tag', id: tag.id })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSelectView({ kind: 'tag', id: tag.id })
+                  }
+                }}
                 onContextMenu={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -529,7 +537,15 @@ function FeedRow({
 }) {
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         e.stopPropagation()

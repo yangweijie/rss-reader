@@ -14,3 +14,4 @@ runtime
 /database/database.sqlite
 node_modules
 public/static/app/
+view/index/index.html
