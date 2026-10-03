@@ -205,8 +205,9 @@ export function getArticles(
   else if ('tag' in view) path = `/api/articles/by-tag${qs({ tag_id: view.tag })}`
   else if ('feed' in view) path = `/api/articles/by-feed${qs({ feed_id: view.feed })}`
   else path = `/api/articles/by-category${qs({ category_id: view.category })}`
-  // by-feed 等路径可能已带 query,需按情况用 ? 或 & 拼接
-  return api<Paged<Article>>(path + (path.includes('?') ? '&' : '?') + qs(params))
+  // by-feed 等路径可能已带 query:已有 query 时用 & 追加,否则用 ?(去掉 qs 自带的前缀)
+  const paramStr = qs(params).replace(/^\?/, '')
+  return api<Paged<Article>>(path + (path.includes('?') ? '&' : '?') + paramStr)
 }
 
 export const getArticleInfo = (id: number) =>

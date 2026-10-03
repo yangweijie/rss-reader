@@ -84,6 +84,8 @@ export default function Reader() {
   const [view, setView] = useState<View>({ kind: 'all' })
   const [articles, setArticles] = useState<Article[]>([])
   const [total, setTotal] = useState(0)
+  /** 触底加载已取不到新数据(后端返回重叠页),视为到底 */
+  const [endReached, setEndReached] = useState(false)
   const [keyword, setKeyword] = useState('')
   /** 搜索框即时值,防抖后同步到 keyword 触发查询 */
   const [keywordInput, setKeywordInput] = useState('')
@@ -164,6 +166,9 @@ export default function Reader() {
 
   const selectedTags = selected?.tags
 
+  /** 是否还有更多可加载:未到底且已加载条数少于总数 */
+  const hasMore = !endReached && articles.length < total
+
   /* ---------- 数据加载 ---------- */
 
   const viewToParam = (v: View) =>
@@ -194,7 +199,18 @@ export default function Reader() {
       if (epoch !== fetchEpochRef.current) return
       pageRef.current = p
       setTotal(data.total)
-      setArticles((prev) => (append ? [...prev, ...data.list] : data.list))
+      if (!append) {
+        setEndReached(false)
+        setArticles(data.list)
+        return
+      }
+      // 追加时按 id 去重:offset 分页在刷新任务插入新文章时可能返回重叠页,
+      // 重复 id 会产生重复 React key,进而导致列表 DOM 清理失效、旧数据残留
+      const seen = new Set(articles.map((a) => a.id))
+      const fresh = data.list.filter((a) => !seen.has(a.id))
+      // 本次一条新数据都没追加到,视为已到底,不再继续加载
+      setEndReached(fresh.length === 0)
+      setArticles((prev) => (fresh.length === 0 ? prev : [...prev, ...fresh]))
     } catch (e) {
       if (epoch === fetchEpochRef.current) {
         toast.error(e instanceof Error ? e.message : '加载文章失败')
@@ -371,7 +387,7 @@ export default function Reader() {
   }
 
   const loadMore = () => {
-    if (loadingRef.current || articles.length >= total) return
+    if (loadingRef.current || !hasMore) return
     void fetchPage(pageRef.current + 1, true)
   }
 
@@ -992,7 +1008,7 @@ export default function Reader() {
           viewKey={`${view.kind}:${'id' in view ? view.id : ''}:${keyword}:${unreadOnly ? 1 : 0}`}
           count={total}
           articles={articles}
-          total={total}
+          hasMore={hasMore}
           selectedId={selected?.id ?? null}
           loading={listLoading}
           keyword={keywordInput}

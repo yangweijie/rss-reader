@@ -20,7 +20,8 @@ export interface ArticleListProps {
   viewKey: string
   count: number
   articles: Article[]
-  total: number
+  /** 是否还有更多可加载(到底后显示"没有更多文章了") */
+  hasMore: boolean
   selectedId: number | null
   loading: boolean
   keyword: string
@@ -49,7 +50,7 @@ export default function ArticleList(props: ArticleListProps) {
     viewKey,
     count,
     articles,
-    total,
+    hasMore,
     selectedId,
     loading,
     keyword,
@@ -172,12 +173,12 @@ export default function ArticleList(props: ArticleListProps) {
             />
           ))
         )}
-        {!loading && articles.length < total && (
+        {!loading && hasMore && (
           <div className="flex justify-center p-4">
             <RefreshCw size={16} className="animate-spin text-soft" />
           </div>
         )}
-        {!loading && articles.length > 0 && articles.length >= total && (
+        {!loading && articles.length > 0 && !hasMore && (
           <div className="py-4 text-center text-[13px] text-soft">没有更多文章了</div>
         )}
         {/* 移动端底部导航占位 */}
