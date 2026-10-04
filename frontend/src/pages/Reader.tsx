@@ -270,7 +270,7 @@ export default function Reader() {
     setView(v)
     setKeyword('')
     setKeywordInput('')
-    setUnreadOnly(false)
+    // 只看未读跨频道保持(与参考设计一致),由用户手动关闭
     setSelected(null)
     setMobileSidebarOpen(false)
   }

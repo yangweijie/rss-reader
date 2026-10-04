@@ -340,6 +340,7 @@ class Articles
 
         $article->read = 1;
         $article->save();
+        Subscription::syncUnreadCounts([$article->feed_id]);
 
         return Jump::returnResponse()->success("标记已读成功");
     }
@@ -368,6 +369,7 @@ class Articles
 
         $article->read = 0;
         $article->save();
+        Subscription::syncUnreadCounts([$article->feed_id]);
 
         return Jump::returnResponse()->success("取消已读成功");
     }
@@ -398,6 +400,8 @@ class Articles
             ->where("published_at", "<=", $article->published_at)
             ->where("read", 0)
             ->update(["read" => 1]);
+        // 批量更新涉及用户全部订阅源,统一重算计数
+        Subscription::syncUnreadCounts($feedIds);
 
         return Jump::returnResponse()->success("标记已读成功");
     }

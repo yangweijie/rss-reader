@@ -104,6 +104,13 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html,
+  body {
+    height: 100%;
+    /* 全屏应用壳:禁止页面级滚动,滚动只发生在三栏内部容器 */
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   body {
     @apply bg-background text-foreground font-sans;
   }

@@ -74,6 +74,11 @@ class FeedService
                     $result["updated"]++;
                 }
             }
+
+            // 新增文章均为未读,刷新结束后统一重算该源未读计数
+            if ($result["new"] > 0) {
+                Subscription::syncUnreadCounts([$feed->id]);
+            }
         } catch (Exception $e) {
             $result["errors"][] = $e->getMessage();
             echo "[" .
@@ -184,22 +189,9 @@ class FeedService
         return "created";
     }
 
-    public static function deleteFeed(Feed $feed): void
-    {
-        $feed->togher(Article::class)->delete();
-        $feed->delete();
-    }
-
     public static function markFeedRead(Feed $feed): void
     {
         Article::where("feed_id", $feed->id)->update(["read" => 1]);
-    }
-
-    public static function markAllRead(?int $userId): int
-    {
-        Article::where("user_id", $userId)->update([
-            "read" => 1,
-        ]);
     }
 
     public static function exportOpml(int $userId): string
